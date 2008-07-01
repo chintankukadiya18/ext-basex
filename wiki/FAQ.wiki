@@ -24,7 +24,7 @@ This page is designed to answer some common questions about how ext-basex works 
 
  == How do I make a synchronous Ajax request using ext-basex? ==
  ===Answer:===
- Use the async config option to any request you would normally make throughout the Ext framework: 
+ Use the *async* config option to any request you would normally make throughout the Ext framework: 
 {{{
   Ext.Ajax.request (
   {url: 'someUrl.php',
