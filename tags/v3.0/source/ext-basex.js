@@ -49,85 +49,6 @@
 (function(){
 var A = Ext.lib.Ajax;
 
-A.QueueManager = function(config){
-
-    Ext.apply(this, config||{},
-    {  quantas      : 10, //adjustable milliseconds deferred dispatch value
-      priorityQueues: [[],[],[],[],[],[],[],[],[],[]], //iterable array (0-9) of prioritized queues:
-       queues       :{}
-    });
-};
-
-
-Ext.extend(A.QueueManager, Object,{
-
-     getQueue     : function(name){ return this.queues[name]; }
-
-    ,createQueue  : function(config){
-        if(!config){return null;}
-
-        var q = new A.Queue(config);
-        q.manager = this;
-        this.queues[q.name] = q;
-
-        var pqa = this.priorityQueues[q.priority];
-        if(pqa && pqa.indexOf(q.name)==-1){pqa.push(q.name);}
-
-        return q;
-     }
-     //Remove a Queue by passed name or Queue Object reference
-    ,removeQueue  : function(q){
-        if(q && (q = this.getQueue(q.name||q) )){
-            q.suspend();
-            q.clear();  //purge any pending requests
-            this.priorityQueues[q.priority].remove(q);
-            delete this.queues[q.name];
-        }
-    }
-    ,start   :function(){
-        if(!this.started){
-         this.started = true;
-         this.dispatch();
-        }
-    }
-
-   /* Default Dispatch mode: progressive
-    * false to exhaust a priority queue until empty during dispatch (sequential)
-    * true to dispatch a single request from each priority queue until all queues exhausted.
-    * This option may be set on the Queue itself as well.
-    */
-    ,progressive : false
-
-    ,stop    :function(){ this.started = false; }
-
-    /* main Request dispatch loop.  This keeps the maximum allowed number of requests
-     * going at any one time (based on defined queue priority and dispatch mode (see progressive).
-     */
-    ,dispatch   : function(){
-        var qm = this, qmq = qm.queues;
-        var disp = function(qName){
-             var q = qmq[qName];
-             if(q && !q.suspended){
-                 while(q.pending && !q.suspended && A.pendingRequests && A.activeRequests < A.maxConcurrentRequests){
-                    q.requestNext();
-                    if(q.progressive || qm.progressive){ break;} //progressive, take the first one off each queue only
-                 }
-                 //keep going?
-                 return !!A.pendingRequests ? (A.activeRequests < A.maxConcurrentRequests) :false;
-             }
-        };
-
-        Ext.each(this.priorityQueues ,function(queues){
-            //queues == array of queue names
-            if(!A.pendingRequests ){return false;}
-            return Ext.each(queues||[],disp,this) === undefined?true:false;
-        }, this);
-
-        !!A.pendingRequests ? this.dispatch.defer(this.quantas,this): this.stop();
-
-     }
-});
-
 
 A.Queue = function(config){
 
@@ -199,6 +120,95 @@ Ext.extend(A.Queue, Object ,{
  });
 
 
+A.QueueManager = function(config){
+
+    Ext.apply(this, config||{},
+    {  quantas      : 10, //adjustable milliseconds deferred dispatch value
+      priorityQueues: [[],[],[],[],[],[],[],[],[],[]], //iterable array (0-9) of prioritized queues:
+       queues       :{}
+    });
+};
+
+
+Ext.extend(A.QueueManager, Object,{
+
+     getQueue     : function(name){ return this.queues[name]; }
+
+    ,createQueue  : function(config){
+        if(!config){return null;}
+
+        var q = new A.Queue(config);
+        q.manager = this;
+        this.queues[q.name] = q;
+
+        var pqa = this.priorityQueues[q.priority];
+        if(pqa && pqa.indexOf(q.name)==-1){pqa.push(q.name);}
+
+        return q;
+     }
+     //Remove a Queue by passed name or Queue Object reference
+    ,removeQueue  : function(q){
+        if(q && (q = this.getQueue(q.name||q) )){
+            q.suspend();
+            q.clear();  //purge any pending requests
+            this.priorityQueues[q.priority].remove(q);
+            delete this.queues[q.name];
+        }
+    }
+    ,start   :function(){
+        if(!this.started){
+         this.started = true;
+         this.dispatch();
+        }
+    }
+
+    ,suspendAll : function(){
+        forEach(this.queues, function(Q){ Q.suspend(); });
+    }
+    ,resumeAll : function(){
+        forEach(this.queues, function(Q){ Q.resume(); });
+        this.start();
+    }
+
+
+   /* Default Dispatch mode: progressive
+    * false to exhaust a priority queue until empty during dispatch (sequential)
+    * true to dispatch a single request from each priority queue until all queues exhausted.
+    * This option may be set on the Queue itself as well.
+    */
+    ,progressive : false
+
+    ,stop    :function(){ this.started = false; }
+
+    /* main Request dispatch loop.  This keeps the maximum allowed number of requests
+     * going at any one time (based on defined queue priority and dispatch mode (see progressive).
+     */
+    ,dispatch   : function(){
+        var qm = this, qmq = qm.queues;
+        var disp = function(qName){
+             var q = qmq[qName];
+             if(q && !q.suspended){
+                 while(q.pending && !q.suspended && A.pendingRequests && A.activeRequests < A.maxConcurrentRequests){
+                    q.requestNext();
+                    if(q.progressive || qm.progressive){ break;} //progressive, take the first one off each queue only
+                 }
+                 //keep going?
+                 return !!A.pendingRequests ? (A.activeRequests < A.maxConcurrentRequests) :false;
+             }
+        };
+
+        Ext.each(this.priorityQueues ,function(queues){
+            //queues == array of queue names
+            if(!A.pendingRequests ){return false;}
+            return Ext.each(queues||[],disp,this) === undefined?true:false;
+        }, this);
+
+        !!A.pendingRequests ? this.dispatch.defer(this.quantas,this): this.stop();
+
+     }
+});
+
+
 
 Ext.apply( A ,
 {
@@ -215,10 +225,10 @@ Ext.apply( A ,
   pendingRequests   : 0,
 
   //Specify the maximum allowed during concurrent Queued browser (XHR) requests
-  maxConcurrentRequests : 10,  //Ext.isGecko?4:2 ,
+  maxConcurrentRequests : 10,
 
   /* set True as needed, to coerce IE to use older ActiveX interface */
-  forceActiveX:false,
+  forceActiveX      :false,
 
   /* Global default may be toggled at any time */
   async       :true,
@@ -509,7 +519,7 @@ Ext.apply( A ,
 
                //Named priority queues
                if((options.queue || (options.queue = this.queueAll||null))  && !options.queued){
-                   var q = options.queue, qname = q.name || q, qm=this.queueManager;
+                   var q = options.queue, qname = q.name || 'default', qm=this.queueManager;
                    q = qm.getQueue(qname) || qm.createQueue(q);
                    options.queue  = q;
                    options.queued = true;
@@ -962,13 +972,26 @@ if(Ext.util.Observable){
     var gather = function(method, url, callbacks, data, options){
 
         if(method == 'SCRIPT'){
-            return Ext.get(domNode('script',{type :"text/javascript",src:url},callbacks, options.target||window));
+            return Ext.apply(Ext.get(domNode('script',{type :"text/javascript",src:url},callbacks, options.target||window)),{options:options});
         }else if(method == 'LINK'){
-            return Ext.get(domNode('link',{rel:"stylesheet",type:"text/css", href:url },callbacks, options.target||window));
+            return Ext.apply(Ext.get(domNode('link',{rel:"stylesheet",type:"text/css", href:url },callbacks, options.target||window)),{options:options});
         }else{
            return A.request(method, url, callbacks, data, options);
         }
 
+    };
+    //normalize a resource to name-component hash
+    var modulate = function(moduleName, options){
+        var name = String(moduleName).trim().split('\/').last(),
+            fname = (name.indexOf('.') !== -1 ? moduleName: moduleName + '.js'),
+            path = options && options.modulePath ? String(options.modulePath) : '';
+        return {
+            name        : name,
+            fullName    : fname,
+            extension   : fname.split('.').last().trim().toLowerCase(),
+            path        : path,
+            url         : path + fname
+        }
     };
 
     Ext.extend(Ext.ux.ModuleManager, Ext.util.Observable,{
@@ -995,30 +1018,34 @@ if(Ext.util.Observable){
         return this.modules[name] || false;
     }
 
-    /* A mechanism for modules to identify their presence */
+    /* A mechanism for modules to identify their presence when loaded via conventional <script> tags
+    * provides ( 'moduleA', 'moduleB');
+    */
     ,provides : function(){
         Array.prototype.forEach.call(arguments,function(module){
-           var modName = String(module).trim().split('\/').pop()
-              ,fullName   = module.indexOf('.') !== -1 ? module.trim() : module.trim() + '.js';
 
-           this.modules[modName] || (this.modules[modName] =
-             {
-                 name       :modName.trim()
-                ,fullName   :fullName.trim()
-                ,extension  :fullName.split('.').pop().trim()
-                ,path       :''
-                ,url        :''
-                ,loaded     :true
-                ,executed   :true
+           var moduleObj = modulate(module), m;
+
+           m = this.modules[moduleObj.name] || (this.modules[moduleObj.name] =
+              Ext.apply({
+                 executed   :moduleObj.extension === 'js'
                 ,contentType:''
                 ,content    : null
-                });
+                }, moduleObj ));
+
+           m.loaded = true;
 
         },this);
 
     }
     /*
      load external resources in dependency order
+     alternate load syntax:
+
+     load( 'moduleA', 'path/moduleB'  );
+     load( {module:['modA','path/modB'], callback:cbFn, method:'DOM', queue:'fast', ... });
+     load( {async:false, listeners: {complete: onCompleteFn, loadexception: loadExFn }}, 'moduleA', inlineFn, {async:true}, 'moduleB', inlineFn, .... );
+
     */
 
     ,load:function(modList){
@@ -1041,15 +1068,15 @@ if(Ext.util.Observable){
              async      :this.asynchronous,
              headers    :this.headers||false,
              modulePath :this.modulePath,
-             method     :(this.noExecute || this.cacheResponses ? 'GET' : this.method || 'GET').toUpperCase(),
              forced     : false,
              cacheResponses : this.cacheResponses,
+             method     : (this.noExecute || this.cacheResponses ? 'GET' : this.method || 'GET').toUpperCase(),
              noExecute  : this.noExecute || false,
              callback   :null,
              scope      :null,
              params     :null
              })
-         ,options          = {}
+         ,options          = null
          ,executed         = []
          ,loaded           = []
          ,params           = null
@@ -1061,7 +1088,7 @@ if(Ext.util.Observable){
                  if(!success)keepItUp = res;
              }
              if(cb = o.callback){
-                 cb.apply(o.scope||null,[success,currModule,loaded, executed]);
+                 cb.apply(o.scope||this,[success,currModule,loaded, executed]);
                  }
 
              nextModule();
@@ -1099,7 +1126,7 @@ if(Ext.util.Observable){
 
                 }catch(exl) {
                    cbArgs = [{
-                        error         :exl
+                        error         :(this.lastError = exl)
                        ,httpStatus    :response.status
                        ,httpStatusText:response.statusText
                        }];
@@ -1117,7 +1144,7 @@ if(Ext.util.Observable){
                result = module.pending = false;
 
                doCallBacks(opt, result , module, [{
-                    error         :response.fullStatus.error
+                    error         :(this.lastError = response.fullStatus.error)
                    ,httpStatus    :response.status
                    ,httpStatusText:response.statusText
                    }]);
@@ -1131,15 +1158,14 @@ if(Ext.util.Observable){
 
                 //inline callbacks
                 if(typeof module == 'function'){
-                        module(result,null,loaded);
+                        module.call(this, result,null,loaded);
                         arguments.callee.defer(1,this);
                         return;
                    }
 
                 //normalize to options
-                Ext.apply(options,
-                    typeof module == 'object'? module : {module:module},
-                    defOptions);
+                options =  Ext.apply(options || defOptions ,
+                   (typeof module == 'object'? module : {module:module}) );
 
                 //setup possible single-use listeners for the current request chain
                 if(options.listeners){
@@ -1182,32 +1208,28 @@ if(Ext.util.Observable){
                         return;
                     }
 
-                    var  moduleName = module.trim().split('\/').pop()
-                        ,fullModule = (module.indexOf('.') !== -1 ? module : module + '.js')
+                    var  moduleObj = modulate(module, options) ,url = moduleObj.url;
 
-                        ,moduleObj = this.getModule(moduleName) ||
-                            (this.modules[moduleName] = {
-                                 name       :moduleName.trim()
-                                ,fullName   :fullModule.trim()
-                                ,extension  :fullModule.split('.').pop().trim().toLowerCase()
-                                ,path       :options.modulePath
-                                ,url        :options.modulePath + fullModule
-                                ,loaded     :false
+                         moduleObj = this.getModule(moduleObj.name) ||
+                            (this.modules[moduleObj.name] = Ext.apply({
+                                 loaded     :false
                                 ,executed   :false
                                 ,pending    :false
                                 ,contentType:''
                                 ,content    : null
                                 ,transport  : null
-                               })
-                        ,executable = (moduleObj.extension=="js" && !options.noExecute);
+                               }, moduleObj) );
+
+                        var executable = (moduleObj.extension=="js" && !options.noExecute);
+
 
                         if((!moduleObj.loaded && !moduleObj.pending) || options.forced){
 
                            moduleObj.pending = true;
                            if(/get|script|dom|link/i.test(options.method)){
-                               fullModule += (params?'?' + params:'');
+                               url += (params?'?' + params:'');
                                if(options.disableCaching === true){
-                                  fullModule += (params?'&':'?')+'_dc=' + (new Date().getTime());
+                                  url += (params?'&':'?')+'_dc=' + (new Date().getTime());
                                }
                                data = null;
                            }
@@ -1215,7 +1237,7 @@ if(Ext.util.Observable){
                            options.async = options.method === 'DOM' ? true : options.async;
 
                            moduleObj.transport = gather(options.method=='DOM'? (moduleObj.extension == 'css'?'LINK':'SCRIPT'):options.method
-                                 ,options.modulePath + fullModule
+                                 ,url
                                  ,{success:success,failure:failure,scope:this,argument:{module:moduleObj,options:options}}
                                  ,data
                                  ,options);
@@ -1230,7 +1252,7 @@ if(Ext.util.Observable){
                                }
                                loaded.push(moduleObj);
 
-                           } else if(moduleObj.pending){
+                           } else if(moduleObj.pending ){   //
                                modules.unshift(module); //wait until available before requesting next dependent
                                arguments.callee.defer(5,this);
                                return;
@@ -1265,7 +1287,7 @@ if(Ext.util.Observable){
         nextModule();
 
        } catch(ex){
-        if (ex != StopIter){throw ex;}
+        if (ex != StopIter){throw (this.lastError = ex);}
        }
 
       return result;
@@ -1391,10 +1413,10 @@ if(Ext.util.Observable){
            return a;
        },
 
-       compact: function(){                     //Remove null, undefined array elements
+       compact: function(deep){                     //Remove null, undefined array elements
           var a=[];
           this.forEach(function(v){
-              (v ===null || v=== undefined) || a.push(v);
+              (v ===null || v=== undefined) || a.push(deep && Ext.isArray(v)?v.compact(): v );
           },this);
           return a;
        },
