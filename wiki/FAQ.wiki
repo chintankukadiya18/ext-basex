@@ -32,3 +32,7 @@ This page is designed to answer some common questions about how ext-basex works 
    ....
   });
   }}}
+ or, make all future requests synchronous:
+ {{{
+ Ext.lib.Ajax.async = false;
+ }}}
