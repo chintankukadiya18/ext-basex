@@ -487,7 +487,7 @@ Ext.apply( A ,
                 }
             }
 
-            if(o.options.isJSON || (this.reCtypeJSON && this.reCtypeJSON.test( headerObj['Content-Type'] || "" ) ){
+            if(o.options.isJSON || (this.reCtypeJSON && this.reCtypeJSON.test( headerObj['Content-Type'] || "" ) )){
                 try{
                       obj.responseJSON = this.decodeJSON(obj.responseText);
                 } catch(exJSON){
