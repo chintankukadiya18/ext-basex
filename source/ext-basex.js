@@ -412,7 +412,7 @@ Ext.apply( A ,
      * to identify a potential JSON response.  The default pattern handles either
      * text/json or application/json
      */
-    reCtypeJSON : /\/json/gi ,
+    reCtypeJSON : /(application|text)\/json/gi ,
 
     createResponseObject:function(o, callbackArg, isAbort){
         var obj = {responseXML   :null,
