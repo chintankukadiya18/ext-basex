@@ -233,6 +233,8 @@ Ext.apply( A ,
   /* Global default may be toggled at any time */
   async       :true,
 
+  defaultPostHeader:'application/x-www-form-urlencoded; charset=UTF-8',
+
   createXhrObject:function(transactionId)
         {
             var obj={  status:{isError:false}
