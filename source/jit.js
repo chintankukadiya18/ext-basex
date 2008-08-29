@@ -241,8 +241,8 @@
                      typeof rm ==='function' ? rm : rm;
                 };
             if(success && mgr){
-               Ext.apply(mgr,{
-                    create : function(config, defaultType){
+
+               mgr.create = mgr.create.createInterceptor( function(config, defaultType){
 
                        var require;
                        if(require = config.require || config.JIT){
@@ -250,15 +250,8 @@
                            //This synchronous request will block until completed
                            Ext.require.apply(Ext, require );
                        }
-                       return new mgr.xtypes[config.xtype || defaultType](config);
+                  });
 
-                     },
-                     registerType : function(xtype, cls){
-                            mgr.xtypes[xtype]=cls;
-                     }
-                    ,xtypes : {}
-                 });
-                 Ext.reg = mgr.registerType;
                  //console.warn("JIT Init!");
            } else {
                L.fireEvent('loadexception', L, 'widget-core', "Ext.ComponentMgr:$JIT Initialization Failure");
@@ -266,7 +259,5 @@
 
 
     });
-
-
 
  })();
