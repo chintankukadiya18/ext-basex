@@ -1,7 +1,7 @@
  /* global Ext */
 
  /*
-    ext-basex 3.0
+    ext-basex 3.1
   ************************************************************************************
 
     Ext.lib.Ajax enhancements:
@@ -18,6 +18,7 @@
      - options.method prevails over any method derived by the lib.Ajax stack (DELETE, PUT, HEAD etc).
      - Adds named-Priority-Queuing for Ajax Requests
      - adds Script=Tag support for foreign-domains (proxied:true) with configurable callbacks.
+     - Adds final features for $JIT support.
 
   ************************************************************************************
   * Author: Doug Hendricks. doug[always-At]theactivegroup.com
@@ -26,7 +27,7 @@
 
   License: ext-basex is licensed under the terms of : GNU Open Source GPL 3.0 license:
 
-  Commercial use is prohibited without contacting licensing[at]theactivegroup.com.
+  Commercial use is prohibited without a Developer License, see: http://licensing.theactivegroup.com.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -107,7 +108,6 @@ Ext.extend(A.Queue, Object ,{
            A.pendingRequests--;
            this.activeRequest = req.active ? A.request.apply(A,req) : null;
            if(this.requests.length==0){
-
                //queue emptied callback
                if(this.callback)
                  {this.callback.call(this.scope||null,this);}
@@ -208,8 +208,6 @@ Ext.extend(A.QueueManager, Object,{
      }
 });
 
-
-
 Ext.apply( A ,
 {
 
@@ -233,8 +231,6 @@ Ext.apply( A ,
   /* Global default may be toggled at any time */
   async       :true,
 
-  defaultPostHeader:'application/x-www-form-urlencoded; charset=UTF-8',
-
   createXhrObject:function(transactionId)
         {
             var obj={  status:{isError:false}
@@ -250,7 +246,6 @@ Ext.apply( A ,
                     try
                     {
                         obj.conn= new ActiveXObject(this.activeX[i]);
-
                         break;
                     }
                     catch(e) {
@@ -594,7 +589,7 @@ Ext.apply( A ,
         {
             var o,f,e=Ext.emptyFn;
             var tId = this.transactionId;
-
+            options || (options = {});
             try
             {
               if(f = options.proxied){ /*scriptTag Support */
@@ -819,7 +814,7 @@ Ext.apply( A ,
        return node;
 
     };
-
+var StopIter  = "StopIteration";
 if(Ext.util.Observable){
 
   Ext.apply( A ,{
@@ -876,8 +871,8 @@ if(Ext.util.Observable){
   Ext.hasBasex = true;
 
    /*
-    * @class Ext.ux.ModuleManager
-    * Version:  1.0
+
+    * Version:  1.1
     ************************************************************************************
       * Author: Doug Hendricks. doug[always-At]theactivegroup.com
       * Copyright 2007-2008, Active Group, Inc.  All rights reserved.
@@ -923,7 +918,13 @@ if(Ext.util.Observable){
 
     YourApp.needs('ext/layouts','js/dragdrop','js/customgrid','style/custom.css');
 
-*/
+   * @class Ext.ux.ModuleManager
+
+   * Constructor - creates a new instance of ux.ModuleManager
+         * @name ModuleManager
+         * @methodOf Ext.ux.ModuleManager
+         * @param {Object} config Configuration options
+         */
 
     Ext.ux.ModuleManager = function(config){
 
@@ -987,12 +988,20 @@ if(Ext.util.Observable){
                  * @param {Array} loaded -- the modules now available as a result of (or previously -- already loaded) the last load operation.
                  * @param {Array} executed -- modules that were executed (evaled) as a result of (or previously executed) the last load operation.
                  */
-                "complete" : true
+                "complete" : true,
+
+                /**
+                 * @event timeout
+                 * Fires when module {@link #load} or {@link #onAvailable} requests have timed out.
+                 * @param {Ext.ux.ModuleManager} this
+                 */
+                "timeout" : true
         });
         Ext.ux.ModuleManager.superclass.constructor.call(this);
 
     };
 
+    /** @private */
     var gather = function(method, url, callbacks, data, options){
 
         if(method == 'SCRIPT'){
@@ -1005,319 +1014,233 @@ if(Ext.util.Observable){
 
     };
     //normalize a resource to name-component hash
-    var modulate = function(moduleName, options){
-        var name = String(moduleName).trim().split('\/').last(),
-            fname = (name.indexOf('.') !== -1 ? moduleName: moduleName + '.js'),
-            path = options && options.modulePath ? String(options.modulePath) : '';
-        return {
+    /** @private */
+     modulate = function(moduleName, options){
+        var mname = String(moduleName.name||moduleName),
+            name = mname.trim().split('\/').last(),
+            fname = options?(name.indexOf('.') !== -1 ? mname: mname + '.js'):'',
+            path = options && options.path ? String(options.path) : '';
+
+        var mod = Ext.apply({
             name        : name,
             fullName    : fname,
             extension   : fname.split('.').last().trim().toLowerCase(),
-            path        : path,
-            url         : path + fname
-        }
+            path        : path
+        },options||{});
+
+        mod.url = path + fname;
+        return mod;
     };
 
     Ext.extend(Ext.ux.ModuleManager, Ext.util.Observable,{
-
+    /**
+      * @cfg {Boolean} disableCaching True to ensure the the browser's cache is bypassed when retrieving resources.
+      */
      disableCaching: false
 
+    /** @private */
     ,modules : {}
 
+    /**
+     * @cfg {String} method The default request method used to retrieve resources.
+     * This method may also changed in-line during a {@link #load) operation.
+     * Supported methods:
+     * <ul>
+     * <li>DOM - Retrieve the resource by <SCRIPT/LINK> tag insertion</li>
+     * <li>GET Retrieve the resource by Ajax Request</li>
+     * <li>POST</li>
+     * <li>PUT</li>
+     * </ul>
+     */
     ,method  :'GET'
 
+    /**
+     * @cfg {Boolean} noExecute Permits retrieval of a resource without script execution of the results.
+     * This option may also be changed in-line during a {@link #load) operation.
+     */
     ,noExecute    : false
-
+    /**
+     * @cfg {Boolean} asynchronous Sets the default behaviour for AJAX requests onlu
+     * This option may also be changed in-line (async: true) during a {@link #load) operation.
+     */
     ,asynchronous : true
 
+     /**
+     * @cfg {Boolean} cacheResponses True, saves any content received in a content object with the following structure:
+     *
+     * This option may also be changed in-line during a {@link #load) operation.
+     */
     ,cacheResponses : false
 
+     /**
+     * @cfg {Integer} onAvailable/load method timeout value in milliseconds
+     */
+    ,timeout       : 30000
+
+     /**
+     * @cfg {Boolean} True retains the resulting content within each module object for debugging.
+     */
+    ,debug         : false
+
+    /** @private */
     ,loadStack     : []
 
     ,loaded:function(name){
         var module;
-        return (module = this.getModule(name)) && module.loaded===true;
+        return (module = this.getModule(name))? module.loaded===true : false;
     }
+
     ,getModule : function(name){
-        return this.modules[name] || false;
+         if(name){name = name.name? name.name : modulate(name,false).name;}
+         return name? this.modules[name] : null;
+    }
+    /* A mechanism for modules to identify their presence when loaded via conventional <script> tags
+     @param {String} module names(s)
+     * Usage: <pre><code>Ext.Loader.provides('moduleA', 'moduleB');</code></pre>
+    */
+    ,createModule : function(name, extras ){
+        var mod;
+        mod = this.getModule(name);
+
+        if(!mod){
+            var m = modulate(name,extras);
+            mod = this.modules[m.name] =
+              Ext.apply({
+                 executed   :false
+                ,contentType:''
+                ,content    : null
+                ,loaded     : false
+                ,pending    : false
+            }, m);
+        }
+
+        return mod;
+    }
+
+    //assert loaded status of module name arguments and invoke callback(s) when all are available
+    ,onAvailable : function(modules, callback, scope, timeout, options){
+
+            if(arguments.length < 2)
+                { return false;}
+
+            var MM = this;
+            var block = {
+
+              modules : Ext.isArray(modules)?modules:[modules],
+              //id : Ext.id(null,'OAV-'),
+              poll : function(){
+                    if(!this.polling)return;
+
+                   var cb=callback,assert=false;
+
+                   var res = Ext.each(this.modules,
+                      function(arg, index, args){
+
+                         return assert = (MM.loaded(arg) === true);
+
+                      },this);
+
+                      if(!assert && this.polling && !this.aborted){
+                               this.poll.defer(50,this);
+                               return;
+                            }
+
+                      this.stop();
+                      if(cb){ cb.call(scope,assert); }
+
+                },
+
+                polling : false,
+
+                abort   : function(){this.aborted = true; this.stop(); },
+
+                stop   : function(){
+                    this.polling = false;
+                    if(this.timer){clearTimeout(this.timer);}
+                    this.timer=null;
+                },
+
+                timer   : null,
+
+                timeout : parseInt(timeout || MM.timeout,10) || 10000,
+
+                onTimeout : function(){
+                    this.abort();
+                    MM.fireEvent('timeout', MM, this.modules);
+                },
+
+                retry   : function(timeout){
+
+                    this.stop();
+                    this.polling = true;
+                    this.aborted = false;
+                    this.timer = this.onTimeout.defer(this.timeout, this);
+                    this.poll();
+                    return this;
+                }
+            };
+
+            return block.retry();
+
     }
 
     /* A mechanism for modules to identify their presence when loaded via conventional <script> tags
-    * provides ( 'moduleA', 'moduleB');
+       or nested on other scripts.
+    @param {String} module names(s)
+    * Usage: <pre><code>Ext.Loader.provides('moduleA', 'moduleB');</code></pre>
     */
     ,provides : function(){
         Array.prototype.forEach.call(arguments,function(module){
 
-           var moduleObj = modulate(module), m;
-
-           m = this.modules[moduleObj.name] || (this.modules[moduleObj.name] =
-              Ext.apply({
+           var moduleObj = this.createModule(module,false );
+           return Ext.apply(moduleObj,{
                  executed   :moduleObj.extension === 'js'
                 ,contentType:''
                 ,content    : null
-                }, moduleObj ));
+                ,loaded     : true
+                ,pending    : false
+              });
 
-           m.loaded = true;
-
-        },this);
+          },this);
 
     }
     /*
      load external resources in dependency order
      alternate load syntax:
-
+      <pre><code>
      load( 'moduleA', 'path/moduleB'  );
      load( {module:['modA','path/modB'], callback:cbFn, method:'DOM', queue:'fast', ... });
      load( {async:false, listeners: {complete: onCompleteFn, loadexception: loadExFn }}, 'moduleA', inlineFn, {async:true}, 'moduleB', inlineFn, .... );
+      </code></pre>
 
+     * @name load
+     * @methodOf Ext.ux.ModuleManager
+     * @param {Mixed} args  One or more module definitions, inline functions to be execute in sequential order
     */
-
+    //state-machine
     ,load:function(modList){
 
-      var opt,modules = Ext.isArray(modList)? modList : Array.prototype.slice.call(arguments, 0);
-
-      if(this.isBusy){
-          this.loadStack.push(modules);
-          return true;
-      }
-
-      //cleanup single-use listeners from the previous request chain
-      this.purgeListeners();
-      this.isBusy = true;
-
-      var result           = true
-         ,keepItUp         = true
-         ,StopIter         = "StopIteration"
-         ,defOptions       = Ext.apply({
-             async      :this.asynchronous,
-             headers    :this.headers||false,
-             modulePath :this.modulePath,
-             forced     : false,
-             cacheResponses : this.cacheResponses,
-             method     : (this.noExecute || this.cacheResponses ? 'GET' : this.method || 'GET').toUpperCase(),
-             noExecute  : this.noExecute || false,
-             callback   :null,
-             scope      :null,
-             params     :null
-             })
-         ,options          = null
-         ,executed         = []
-         ,loaded           = []
-         ,params           = null
-         ,data             = null
-         ,doCallBacks = function(o, success, currModule, args){
-             var cb;
-             if(currModule){
-                 var res= this.fireEvent.apply(this,[(success?'load':'loadexception'), this, currModule].concat(args||[]));
-                 if(!success)keepItUp = res;
-             }
-             if(cb = o.callback){
-                 cb.apply(o.scope||this,[success,currModule,loaded, executed]);
-                 }
-
-             nextModule();
-
-         }.createDelegate(this)
-         ,success =function(response){
-
-                var module = response.argument.module
-               ,opt = response.argument.options
-               ,moduleName = module.name
-               ,executable = (module.extension=="js" && !opt.noExecute && opt.method !== 'DOM')
-               ,cbArgs = null;
-               try{
-                     module.contentType = response.getResponseHeader?response.getResponseHeader['Content-Type'] || '':'';
-                     module.content = opt.cacheResponses ? response.responseText||null : null;
-
-                     if(this.fireEvent('beforeload', this, module, response, response.responseText) !== false){
-                        this.currentModule = moduleName;
-                        if(!opt.single){this.modules[moduleName] = module;}
-                        module.loaded = true;
-                        module.pending = false;
-                        loaded.push(module);
-                        var exception = executable && (!module.executed || opt.forced)?this.globalEval( response.responseText, opt.target ):true;
-                        if(exception===true){
-                            if(executable){
-                                module.executed = true;
-                                executed.push(module);
-                                }
-                            cbArgs =[response, response.responseText,module.executed ];
-                        } else {
-                            //coerce to actual module URL
-                            throw Ext.applyIf({fileName:module.url ,lineNumber:exception.lineNumber||0 },exception );
-                        }
-                     }
-
-                }catch(exl) {
-                   cbArgs = [{
-                        error         :(this.lastError = exl)
-                       ,httpStatus    :response.status
-                       ,httpStatusText:response.statusText
-                       }];
-
-                      result = false;
-                }
-
-                doCallBacks(opt, result, module, cbArgs);
-
-           }.createDelegate(this)
-           ,failure = function(response){
-               var module = response.argument.module, opt = response.argument.options;
-               module.contentType = response.getResponseHeader?response.getResponseHeader['Content-Type'] || '':'';
-
-               result = module.pending = false;
-
-               doCallBacks(opt, result , module, [{
-                    error         :(this.lastError = response.fullStatus.error)
-                   ,httpStatus    :response.status
-                   ,httpStatusText:response.statusText
-                   }]);
-
-           }.createDelegate(this)
-
-         ,nextModule       = function(){
-              var module, moduleList;
-
-              while(keepItUp && (module = modules.shift())){
-
-                //inline callbacks
-                if(typeof module == 'function'){
-                        module.call(this, result,null,loaded);
-                        arguments.callee.defer(1,this);
-                        return;
-                   }
-
-                //normalize to options
-                options =  Ext.apply(options || defOptions ,
-                   (typeof module == 'object'? module : {module:module}) );
-
-                //setup possible single-use listeners for the current request chain
-                if(options.listeners){
-                    this.on(options.listeners);
-                }
-
-                params = data = null;
-                if(params = options.params ){
-                   if(typeof params == "function"){
-                        params = params.call(options.scope||window, options);
-                   }
-                   if(typeof params == "object"){
-                        params = Ext.urlEncode(params);
-                   }
-                   options.params = data= params; //setup for possible post
-                }
-
-
-                module = options.module;
-
-                // coerce to array to support this notation:
-                // {module:'name' or {module:['name1','name2'],callback:cbFn,...
-                // so that callback is only called when the last in the implied list is loaded.
-
-                if(module){
-
-                    if( Ext.isArray(module) && !!module.length){
-                        //var tl = modules.listeners;
-                        moduleList = module.map(function(item, index){
-                                return Ext.applyIf({module:item, callback:null,listeners:null} ,options);
-                            });
-
-                        //last one gets the callback
-                        moduleList[moduleList.length-1].callback = options.callback;
-
-                        //prepend the request stack in original order
-                        modules.unshift.apply(modules, moduleList);
-
-                        arguments.callee.defer(1,this);
-                        return;
-                    }
-
-                    var  moduleObj = modulate(module, options) ,url = moduleObj.url;
-
-                         moduleObj = this.getModule(moduleObj.name) ||
-                            (this.modules[moduleObj.name] = Ext.apply({
-                                 loaded     :false
-                                ,executed   :false
-                                ,pending    :false
-                                ,contentType:''
-                                ,content    : null
-                                ,transport  : null
-                               }, moduleObj) );
-
-                        var executable = (moduleObj.extension=="js" && !options.noExecute);
-
-
-                        if((!moduleObj.loaded && !moduleObj.pending) || options.forced){
-
-                           moduleObj.pending = true;
-                           if(/get|script|dom|link/i.test(options.method)){
-                               url += (params?'?' + params:'');
-                               if(options.disableCaching === true){
-                                  url += (params?'&':'?')+'_dc=' + (new Date().getTime());
-                               }
-                               data = null;
-                           }
-
-                           options.async = options.method === 'DOM' ? true : options.async;
-
-                           moduleObj.transport = gather(options.method=='DOM'? (moduleObj.extension == 'css'?'LINK':'SCRIPT'):options.method
-                                 ,url
-                                 ,{success:success,failure:failure,scope:this,argument:{module:moduleObj,options:options}}
-                                 ,data
-                                 ,options);
-                           return;
-
-                        } else {
-                           if(moduleObj.loaded){
-                               keepItUp = this.fireEvent('alreadyloaded', this, moduleObj);
-
-                               if(executable){
-                                   executed.push(moduleObj);
-                               }
-                               loaded.push(moduleObj);
-
-                           } else if(moduleObj.pending ){   //
-                               modules.unshift(module); //wait until available before requesting next dependent
-                               arguments.callee.defer(5,this);
-                               return;
-
-                           }
-
-
-                         }
-                     }
-
-
-                 } //oe while(module)
-
-                if(modules.length === 0 && this.isBusy){
-                    this.isBusy = false;
-
-                    this.fireEvent('complete', this, result, loaded, executed);
-
-                    //Unwind the deferred load call stack
-                    if(!!this.loadStack.length){
-                         this.load.defer(1,this,this.loadStack.shift());
-                    }
-
-                }
-
-          }.createDelegate(this);
-
-
-       /* Iterate the desired modules in there implied dependency order */
-       try{
-
-        nextModule();
+      try{
+        var task = new Task(this,Ext.isArray(modList)? modList : Array.prototype.slice.call(arguments, 0));
+        task.start();
 
        } catch(ex){
-        if (ex != StopIter){throw (this.lastError = ex);}
+        if (ex != StopIter){
+            //console.error(ex);
+            if(task){
+                task.lastError = ex;
+                task.active = false;
+            }
+            this.lastError = ex;
+            this.fireEvent('loadexception',this,task?task.currentModule:null, ex);
+        }
+
        }
 
-      return result;
+      return task;
     }
 
-    ,globalEval: function( data , scope, context ) {
+   ,globalEval: function( data , scope, context ) {
         scope || (scope = window);
 
         data = String(data||"").trim();
@@ -1336,48 +1259,386 @@ if(Ext.util.Observable){
         }catch(ex){return ex;}
 
     }
-    ,styleAdjust  : null
+   ,styleAdjust  : null
 
-    ,applyStyle : function(module, styleRules, target){
-        module || ( module = {});
-         //All css is injected into document's head section
-        var doc = (target||window).document;
-        var ct = (styleRules || module.content || '')+'';
-        var head;
-        if(doc && !!ct.length && (head = doc.getElementsByTagName("head")[0])){
+   ,applyStyle : function(module, styleRules, target){
+       var rules;
+       if(module = this.getModule(module)){
+             //All css is injected into document's head section
+            var doc = (target||window).document;
+            var ct = (styleRules || (module.content?module.content.text:'') || '')+'';
+            var head;
+            if(doc && !!ct.length && (head = doc.getElementsByTagName("head")[0])){
 
-            if (this.styleAdjust && this.styleAdjust.pattern) {
-               // adjust CSS (eg. urls (images etc))
-               ct = ct.replace(this.styleAdjust.pattern, this.styleAdjust.replacement||'');
-            }
+                if(module.element){
+                   this.removeModuleElement(module);
+                }
+                if (this.styleAdjust && this.styleAdjust.pattern) {
+                   // adjust CSS (eg. urls (images etc))
+                   ct = ct.replace(this.styleAdjust.pattern, this.styleAdjust.replacement||'');
+                }
 
-            var rules = module.element = doc.createElement("style");
-            rules.setAttribute("type", "text/css");
-            if(Ext.isIE){
-                   head.appendChild(rules);
-                   rules.styleSheet.cssText = ct;
-            }else{
-                   try{
-                       rules.appendChild(doc.createTextNode(ct));
-                   }catch(e){
-                       rules.cssText = ct;
-                   }
-                   head.appendChild(rules);
+                rules = module.element = doc.createElement("style");
+                rules.setAttribute("type", "text/css");
+                if(Ext.isIE){
+                       head.appendChild(rules);
+                       rules.styleSheet.cssText = ct;
+                }else{
+                       try{
+                           rules.appendChild(doc.createTextNode(ct));
+                       }catch(e){
+                           rules.cssText = ct;
+                       }
+                       head.appendChild(rules);
+                }
             }
         }
         return rules; //the style element created
     }
 
     /*Helper: Remove a style element
-     * @param {Ext.ux.ModuleManager.module or dom Node}
+     * @name removeStyle
+     * @param {Mixed} A Ext.ux.ModuleManager.module or dom Node
+     * @return {Ext.Element} the element removed.
      */
     ,removeStyle  : function(module){
+         return this.removeModuleElement(module);
+    }
+
+    /** @private */
+    //Remove an associated module.element from the DOM
+    ,removeModuleElement : function(module){
         var el;
-        if(module && (el = module.element)){
-            el.dom ? el.removeAllListeners().remove() : Ext.removeNode(el);
+        if(module = this.getModule(module)){
+            if(el = module.element){
+                el.dom ? el.removeAllListeners().remove() : Ext.removeNode(el);
+                module.element = null;
+            }
         }
+
     }
  });
+
+ var Task = Ext.ux.ModuleManager.Task = function(MM,modules){
+
+   Ext.apply(this,{
+      result           : true
+     ,active           : false
+     ,options          : null
+     ,executed         : []
+     ,loaded           : []
+     ,params           : null
+     ,data             : null
+     ,oav              : null
+     ,unlisteners      : []
+     ,MM               : MM
+     ,id               : Ext.id(null,'mm-task-')
+     ,defOptions      :  {
+              async      :MM.asynchronous,
+              headers    :MM.headers||false,
+              modulePath :MM.modulePath,
+              forced     : false,
+              cacheResponses : MM.cacheResponses,
+              method     : (MM.noExecute || MM.cacheResponses ? 'GET' : MM.method || 'GET').toUpperCase(),
+              noExecute  : MM.noExecute || false,
+              disableCaching : MM.disableCaching,
+              timeout    : MM.timeout,
+              callback   :null,
+              scope      :null,
+              params     :null
+              }
+     });
+
+     this.prepare(modules);
+
+
+  };
+ Ext.apply(Task.prototype,{
+
+          start        : function() {
+              this.active = true;
+              this.nextModule();
+              if(this.options.async){
+                this.oav = this.MM.onAvailable.call(this.MM, this.onAvailableList, this.onComplete, this , this.options.timeout, this.options);
+            }else {
+               this.onComplete(this.result) ;
+            }
+
+           }
+          ,doCallBacks : function(o, success, currModule, args){
+              var cb;
+              if(currModule){
+                  var res= this.MM.fireEvent.apply(this.MM,[(success?'load':'loadexception'), this.MM, currModule].concat(args||[]));
+                  if(!success){this.active = res;}
+
+                  //Notify other pending async listeners
+                  if(this.active && currModule.notify){
+
+                      forEach(currModule.notify,function(chain, index, chains){
+                          if(chain){
+                             chain.nextModule();
+                             chains[index] = null;
+                         }
+                      });
+                      currModule.notify= [];
+                  }
+              }
+          }
+          ,success : function(response){
+
+             var module = response.argument.module.module
+                ,opt = response.argument.module
+                ,executable = (module.extension=="js" && !opt.noExecute && opt.method !== 'DOM')
+                ,cbArgs = null;
+
+             this.currentModule = module.name;
+
+             if(!module.loaded){
+                    try{
+
+                          if(this.MM.fireEvent('beforeload', this.MM, module, response, response.responseText) !== false){
+
+                             Ext.apply(module,{
+                               loaded : true
+                              ,pending : false
+                              ,contentType : response.getResponseHeader?response.getResponseHeader['Content-Type'] || '':''
+                              ,content : opt.cacheResponses || module.extension=="css" ?
+                                                          { text : response.responseText||null,
+                                                            XML  : response.responseXML||null,
+                                                            JSON : response.responseJSON||null
+                                                           }: null
+                               });
+
+                             this.loaded.push(module);
+                             var exception = executable && (!module.executed || opt.forced)?this.MM.globalEval( response.responseText, opt.target ):true;
+                             if(exception===true){
+                                 if(executable){
+                                     module.executed = true;
+                                     this.executed.push(module);
+                                     }
+                                 cbArgs =[response, response.responseText, module.executed ];
+                             } else {
+                                 //coerce to actual module URL
+                                 throw Ext.applyIf({fileName:module.url ,lineNumber:exception.lineNumber||0 },exception );
+                             }
+                          }
+
+                     }catch(exl) {
+                        cbArgs = [{
+                             error         :(this.lastError = exl)
+                            ,httpStatus    :response.status
+                            ,httpStatusText:response.statusText
+                            }];
+
+                           this.result = false;
+                     }
+
+                     this.doCallBacks(opt, this.result, module, cbArgs);
+                 } else {
+
+                     if(opt.async){this.nextModule();}
+                 }
+
+            }
+
+           ,failure : function(response){
+                var module = response.argument.module.module
+                   ,opt = response.argument.module;
+
+                module.contentType = response.getResponseHeader?response.getResponseHeader['Content-Type'] || '':'';
+                this.currentModule = module.name;
+                this.result = module.pending = false;
+
+                this.doCallBacks(opt, this.result , module, [{
+                     error         :(this.lastError = response.fullStatus.error)
+                    ,httpStatus    :response.status
+                    ,httpStatusText:response.statusText
+                    }]);
+                    //console.warn('Fail '+this.id,module.name, this.lastError);
+            }
+
+           ,nextModule       : function(){
+               var module, transport, executable, options, url ;
+
+               while(this.active && (module = this.workList.shift())){
+
+                 //inline callbacks
+                 if(typeof module == 'function'){
+                         module.apply(this,[ this.result,null,this.loaded]);
+                         continue;
+                    }
+
+                 //setup possible single-use listeners for the current request chain
+                 if(module.listeners){
+                     this.unlisteners.push(module.listeners);
+                     this.MM.on(module.listeners);
+                     delete module.listeners;
+
+                 }
+
+                 var params = null, data = null, moduleObj;
+                 if(params = module.params ){
+                    if(typeof params == "function"){
+                         params = params.call(options.scope||window, options);
+                    }
+                    if(typeof params == "object"){
+                         params = Ext.urlEncode(params);
+                    }
+                    module.params = data= params; //setup for possible post
+                 }
+
+                 options = module;
+
+                 if(moduleObj = this.MM.createModule(module.module,{path:options.modulePath})){
+                         url = moduleObj.url;
+
+                         executable = (moduleObj.extension=="js" && !options.noExecute);
+
+                         if((!moduleObj.loaded) || options.forced){
+
+                           if(!moduleObj.pending){
+                                moduleObj.pending = true;
+                                if(/get|script|dom|link/i.test(options.method)){
+                                    url += (params?'?' + params:'');
+                                    if(options.disableCaching === true){
+                                       url += (params?'&':'?')+'_dc=' + (new Date().getTime());
+                                    }
+                                    data = null;
+                                }
+
+                                options.async = options.method === 'DOM' ? true : options.async;
+
+                                transport = gather(options.method=='DOM'? (moduleObj.extension == 'css'?'LINK':'SCRIPT'):options.method
+                                      ,url
+                                      ,{success:this.success,failure:this.failure,scope:this,argument:{module:module}}
+                                      ,data
+                                      ,options);
+
+                                moduleObj.transport = options.debug? transport : null;
+                                if(options.method == 'DOM'){
+                                     moduleObj.element = transport;
+                                }
+                            }
+
+                            if(options.async){break;}
+
+                         } else {
+
+                            this.active = this.MM.fireEvent('alreadyloaded', this.MM, moduleObj) !== false;
+
+                            if(executable){
+                                this.executed.push(moduleObj);
+                            }
+                            this.loaded.push(moduleObj);
+
+                         }
+
+
+                  } //if moduleObj
+             } //oe while(module)
+
+             if(this.active && module && module.async && moduleObj ){
+                moduleObj.notify || (moduleObj.notify = []);
+                moduleObj.notify.push(this);
+              }
+
+
+
+           }
+           //Private
+           /*
+             Normalize requested modules and options into a sequential series of load requests and inline callbacks
+            */
+           ,prepare : function(modules){
+
+               var onAvailableList = [],workList = [],options = this.defOptions, mtype, MM = this.MM;
+
+               var expand = function(mods){
+
+                   mods = [].concat(mods);
+                   var adds=[];
+                   forEach(mods,function(module){
+
+                       if(!module)return;
+                       var m;
+                       mtype = typeof (module);
+                       switch(mtype ){
+                           case 'string':  //a named resource
+
+
+                              m= MM.createModule(module,{path:options.modulePath});
+                              if( !m.loaded ){
+                                    module = Ext.applyIf({name:m.name, module:m, callback:null} ,options);
+                                    delete options.listeners;
+                                    workList.push(module);
+                                    adds.push(module);
+                                 }
+
+                             onAvailableList.push(m.name);
+
+                              break;
+                           case 'object':  //or array of modules
+                             // coerce to array to support this notation:
+                             // {module:'name' or {module:['name1','name2'],callback:cbFn,...
+                             // so that callback is only called when the last in the implied list is loaded.
+
+                                if(m = (module.modules || module.module)){
+                                    adds = expand(m);
+                                    delete module.module;
+                                    delete module.modules;
+                                }
+                                if(Ext.isArray(module)){
+                                    adds = expand(module);
+                                } else {
+                                    Ext.apply(options, module);
+
+                                }
+                                break;
+                           case 'function':
+                                 workList.push( module);
+                           default:
+                        }
+
+                   });
+
+                   return adds;
+               };
+
+               expand(modules);
+               this.options = options;
+               this.workList = workList.flatten().compact();
+               this.onAvailableList= onAvailableList.flatten().unique();
+              // console.log(this.workList.clone(), options);
+           }
+
+           ,onComplete : function(loaded){   //called with scope of last module in chain
+                 var cb;
+                 //console.log('firing complete:'+this.id, loaded, this, this.options, new Date().getTime());
+                 if(loaded){
+
+                     if(cb = this.options.callback){
+                          cb.apply(this.options.scope||this,[this.result,this.loaded, this.executed]);
+                      }
+                     this.MM.fireEvent('complete', this.MM, this.result, this.loaded, this.executed);
+
+                  }
+
+                  //cleanup single-use listeners from the previous request chain
+                  if(this.unlisteners){
+                       forEach(this.unlisteners, function(block){
+                          forEach(block, function(listener, name, listeners){
+                              var fn = listener.fn || listener;
+                              var scope = listener.scope || listeners.scope || this.MM;
+                              var ev = listener.name || name;
+                              this.MM.removeListener( ev, fn, scope);
+                            },this);
+                        },this);
+                   }
+                  this.active = false;
+
+              }
+
+   });
 }
 
 })();
@@ -1490,9 +1751,9 @@ if(Ext.util.Observable){
             throw new TypeError();
         }
         for (var key in object) {
-               if (typeof this.prototype[key] == "undefined") {  //target instance properties
-                  try{block.call(context || null, object[key], key, object);}catch(e){}
-               }
+           if (typeof this.prototype[key] == "undefined") {  //target instance properties
+              try{block.call(context || null, object[key], key, object);}catch(e){}
+           }
         }
       }
     });
