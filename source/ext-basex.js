@@ -486,7 +486,9 @@ Ext.apply( A ,
 
             if(o.options.isJSON || (this.reCtypeJSON && this.reCtypeJSON.test( headerObj['Content-Type'] || "" ) )){
                 try{
-                      obj.responseJSON = this.decodeJSON(obj.responseText);
+                      //Ext.decode may not have be available when basex was initialized
+                      var decode = this.decodeJSON || Ext.decode;
+                      !decode || (obj.responseJSON = decode(obj.responseText));
                 } catch(exJSON){
                       o.status.isError = true;  //trigger future exception callback
                       o.status.error = exJSON;
@@ -531,6 +533,12 @@ Ext.apply( A ,
                queue    :null,
                proxied  :false
                }, options||{});
+
+        //Auto Proxy (JSONP) detection for foreign-domain:port
+        if(!options.proxied){
+            var r = /^(?:\w+:)?\/\/([^\/?#]+)/;
+            options.proxied = r.test(uri) && r.exec(uri)[1] != location.host;
+        }
 
         if(!this.events || this.fireEvent('request', method, uri, cb, data, options) !== false){
 
@@ -592,11 +600,12 @@ Ext.apply( A ,
             options || (options = {});
             try
             {
-              if(f = options.proxied){ /*scriptTag Support */
+              if(f = options.proxied){ /*JSONP scriptTag Support */
 
                 o = { tId: tId,
                       status  : {},
                       proxied : true,
+                      //synthesize an XHR object
                       conn: {
                           el            : null,
                           send          : function(){
@@ -618,7 +627,13 @@ Ext.apply( A ,
                     };
 
                 window[o.cbName] = o.cb = function(content,request){
-                     this.responseText = !!content?content:null;
+
+                     if(content && typeof content == 'object'){
+                         this.responseJSON = content;
+                         this.responseText = Ext.encode(content);
+                     } else {
+                         this.responseText = content || null;
+                     }
 
                      this.readyState = 4;
                      this.status     = !!content?200:404;
@@ -629,10 +644,11 @@ Ext.apply( A ,
                      if(!request.debug){
                          Ext.removeNode(this.el);
                          this.el = null;
+                         window[request.cbName] = undefined;
+                         try{delete window[request.cbName];}catch(ex){}
                      }
 
-                     window[request.cbName] = undefined;
-                     try{delete window[request.cbName];}catch(ex){}
+
 
 
                 }.createDelegate(o.conn,[o],true);
@@ -640,7 +656,8 @@ Ext.apply( A ,
                 o.conn.open = function(){
                    this.el= domNode(f.tag || 'script'
                                      ,{type :"text/javascript"
-                                      , src :o.cbParam?uri + (uri.indexOf("?") != -1 ? "&" : "?") + String.format("{0}={1}", o.cbParam , o.cbName):uri
+                                       ,src :o.cbParam?uri + (uri.indexOf("?") != -1 ? "&" : "?") + String.format("{0}={1}", o.cbParam , o.cbName):uri
+                                   ,charset : f.charset || options.charset || null
                                       }
                                      , null
                                      , f.target
@@ -783,7 +800,7 @@ Ext.apply( A ,
 
         if(doc && head && (node = doc.createElement(tag))){
             for(var attrib in attributes){
-                  if(attributes.hasOwnProperty(attrib) && attrib in node){
+                  if(attributes[attrib] && attributes.hasOwnProperty(attrib) && attrib in node){
                       node.setAttribute(attrib, attributes[attrib]);
                   }
             }
@@ -791,10 +808,8 @@ Ext.apply( A ,
             if(callback){
                 var cb = (callback.success||callback).createDelegate(callback.scope||null,[callback],0);
                 if(Ext.isIE){
-                     node.onreadystatechange = function(){
-                          if(/loaded|complete|4/i.test(String(this.readyState))){
-                                 cb();
-                          }
+                     node.onreadystatechange = node.onload = function(){
+                          if(/loaded|complete|4/i.test(String(this.readyState))){ cb(); }
                       }.createDelegate(node);
                 }else if(Ext.isSafari3 && tag == 'script'){
                     //has DOM2 support
@@ -1016,19 +1031,21 @@ if(Ext.util.Observable){
     //normalize a resource to name-component hash
     /** @private */
      modulate = function(moduleName, options){
+         if(!moduleName)return null;
+        options || (options={});
         var mname = String(moduleName.name||moduleName),
             name = mname.trim().split('\/').last(),
-            fname = options?(name.indexOf('.') !== -1 ? mname: mname + '.js'):'',
+            fname = options?( name.indexOf('.') !== -1 ? mname: mname + '.js'):'',
             path = options && options.path ? String(options.path) : '';
 
         var mod = Ext.apply({
             name        : name,
-            fullName    : fname,
-            extension   : fname.split('.').last().trim().toLowerCase(),
+            fullName    : moduleName.name?moduleName.name:fname,
+            extension   : !moduleName.name?fname.split('.').last().trim().toLowerCase():'',
             path        : path
-        },options||{});
+        },options);
 
-        mod.url = path + fname;
+        mod.url = options.url || path + fname;
         return mod;
     };
 
@@ -1388,7 +1405,7 @@ if(Ext.util.Observable){
 
              var module = response.argument.module.module
                 ,opt = response.argument.module
-                ,executable = (module.extension=="js" && !opt.noExecute && opt.method !== 'DOM')
+                ,executable = (!opt.proxied && module.extension=="js" && !opt.noExecute && opt.method !== 'DOM')
                 ,cbArgs = null;
 
              this.currentModule = module.name;
@@ -1492,7 +1509,7 @@ if(Ext.util.Observable){
                  if(moduleObj = this.MM.createModule(module.module,{path:options.modulePath})){
                          url = moduleObj.url;
 
-                         executable = (moduleObj.extension=="js" && !options.noExecute);
+                         executable = (!options.proxied && moduleObj.extension=="js" && !options.noExecute);
 
                          if((!moduleObj.loaded) || options.forced){
 
@@ -1552,6 +1569,7 @@ if(Ext.util.Observable){
            ,prepare : function(modules){
 
                var onAvailableList = [],workList = [],options = this.defOptions, mtype, MM = this.MM;
+               var adds = [];
 
                var expand = function(mods){
 
@@ -1561,12 +1579,12 @@ if(Ext.util.Observable){
 
                        if(!module)return;
                        var m;
+
                        mtype = typeof (module);
                        switch(mtype ){
                            case 'string':  //a named resource
 
-
-                              m= MM.createModule(module,{path:options.modulePath});
+                              m= MM.createModule(module,{path:options.modulePath,url:module.url||null});
                               if( !m.loaded ){
                                     module = Ext.applyIf({name:m.name, module:m, callback:null} ,options);
                                     delete options.listeners;
@@ -1575,6 +1593,7 @@ if(Ext.util.Observable){
                                  }
 
                              onAvailableList.push(m.name);
+
 
                               break;
                            case 'object':  //or array of modules
@@ -1587,10 +1606,34 @@ if(Ext.util.Observable){
                                     delete module.module;
                                     delete module.modules;
                                 }
+
+                                if(module.proxied){
+                                    module.method = 'GET';
+                                    module.cacheResponses = module.async = true;
+                                }
+
                                 if(Ext.isArray(module)){
                                     adds = expand(module);
                                 } else {
-                                    Ext.apply(options, module);
+                                    var mod = module;
+                                    if(module.name){  //for notation {name:'something', url:'assets/something'}
+
+                                        m= MM.createModule(module,{path:options.modulePath,url:mod.url||null});
+                                        delete mod.url;
+                                        Ext.apply(options, mod);
+                                        if( !m.loaded ){
+                                               mod = Ext.applyIf({name:m.name, module:m, callback:null} ,options);
+                                               delete options.listeners;
+                                               workList.push(mod);
+                                               adds.push(mod);
+                                            }
+
+                                         onAvailableList.push(m.name);
+
+
+                                    } else {
+                                        Ext.apply(options, mod);
+                                    }
 
                                 }
                                 break;
@@ -1608,19 +1651,18 @@ if(Ext.util.Observable){
                this.options = options;
                this.workList = workList.flatten().compact();
                this.onAvailableList= onAvailableList.flatten().unique();
-              // console.log(this.workList.clone(), options);
+               //console.info('prepared', this.workList.clone(), this.onAvailableList.clone(), options);
            }
 
            ,onComplete : function(loaded){   //called with scope of last module in chain
                  var cb;
-                 //console.log('firing complete:'+this.id, loaded, this, this.options, new Date().getTime());
+
                  if(loaded){
 
                      if(cb = this.options.callback){
                           cb.apply(this.options.scope||this,[this.result,this.loaded, this.executed]);
                       }
                      this.MM.fireEvent('complete', this.MM, this.result, this.loaded, this.executed);
-
                   }
 
                   //cleanup single-use listeners from the previous request chain
