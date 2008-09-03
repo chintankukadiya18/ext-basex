@@ -242,6 +242,9 @@
                 };
             if(success && mgr){
 
+               //set the default JSON decoder as util.JSON will be available at this point
+               Ext.lib.Ajax.decodeJSON = Ext.decode || null;
+
                mgr.create = mgr.create.createInterceptor( function(config, defaultType){
 
                        var require;
@@ -252,7 +255,6 @@
                        }
                   });
 
-                 //console.warn("JIT Init!");
            } else {
                L.fireEvent('loadexception', L, 'widget-core', "Ext.ComponentMgr:$JIT Initialization Failure");
            }
