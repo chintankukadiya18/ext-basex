@@ -486,9 +486,7 @@ Ext.apply( A ,
 
             if(o.options.isJSON || (this.reCtypeJSON && this.reCtypeJSON.test( headerObj['Content-Type'] || "" ) )){
                 try{
-                      //Ext.decode may not have be available when basex was initialized
-                      var decode = this.decodeJSON || Ext.decode;
-                      !decode || (obj.responseJSON = decode(obj.responseText));
+                      !this.decodeJSON|| (obj.responseJSON = decode(obj.responseText));
                 } catch(exJSON){
                       o.status.isError = true;  //trigger future exception callback
                       o.status.error = exJSON;
