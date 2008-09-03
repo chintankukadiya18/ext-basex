@@ -486,7 +486,7 @@ Ext.apply( A ,
 
             if(o.options.isJSON || (this.reCtypeJSON && this.reCtypeJSON.test( headerObj['Content-Type'] || "" ) )){
                 try{
-                      !this.decodeJSON|| (obj.responseJSON = decode(obj.responseText));
+                      obj.responseJSON = typeof this.decodeJSON == 'function' ? this.decodeJSON(obj.responseText): null;
                 } catch(exJSON){
                       o.status.isError = true;  //trigger future exception callback
                       o.status.error = exJSON;
