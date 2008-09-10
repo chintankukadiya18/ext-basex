@@ -13,7 +13,7 @@
 
   License: ext-basex and $JIT is licensed under the terms of : GNU Open Source GPL 3.0 license:
 
-  Commercial use is prohibited without contacting licensing[at]theactivegroup.com.
+  Commercial use is prohibited without a License. See: http://licensing.theactivegroup.com.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
