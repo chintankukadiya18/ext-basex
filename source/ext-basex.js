@@ -260,7 +260,7 @@ Ext.apply( A ,
 
         }
 
-        /* Replaceable Form encoder */
+    /* Replaceable Form encoder */
     ,encoder : encodeURIComponent
 
     ,serializeForm : function(form) {
