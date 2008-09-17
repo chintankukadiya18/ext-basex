@@ -521,6 +521,7 @@ Ext.apply( A ,
 
     request : function(method, uri, cb, data, options) {
 
+
         options = Ext.apply({
                async    :this.async || false,
                headers  :false,
@@ -532,10 +533,12 @@ Ext.apply( A ,
                proxied  :false
                }, options||{});
 
+
+
         //Auto Proxy (JSONP) detection for foreign-domain:port
         if(!options.proxied){
             var r = /^(?:\w+:)?\/\/([^\/?#]+)/;
-            options.proxied = r.test(uri) && r.exec(uri)[1] != location.host;
+            //options.proxied = r.test(uri) && r.exec(uri)[1] != location.host;
         }
 
         if(!this.events || this.fireEvent('request', method, uri, cb, data, options) !== false){
@@ -620,6 +623,7 @@ Ext.apply( A ,
                           responseXML       : null
                        },
                        debug   : f.debug,
+                       params  : options.params||{},
                        cbName  : f.callbackName  || 'basexCallback' + tId,
                        cbParam : f.callbackParam || null
                     };
@@ -639,22 +643,35 @@ Ext.apply( A ,
                      if(typeof this.onreadystatechange == 'function')
                         {this.onreadystatechange();}
 
-                     if(!request.debug){
-                         Ext.removeNode(this.el);
-                         this.el = null;
+                    //cleanup must be deferred on IE until after the callback completes
+                    (function(){
+                         this.el.onload = (this.el.onreadystatechange = e);
                          window[request.cbName] = undefined;
                          try{delete window[request.cbName];}catch(ex){}
-                     }
 
+                         if(!request.debug){
+                             var p =this.el.parentElement || this.el.parentNode;
+                             if(p){
+                                 p.removeChild(this.el);
+                             }
+                             p=null;
+                         }
 
+                         this.el = null;
+                     }).defer(100,this);
 
 
                 }.createDelegate(o.conn,[o],true);
 
                 o.conn.open = function(){
+
+                   if(o.cbParam){ o.params[o.cbParam]= o.cbName ;}
+
+                   var params = Ext.urlEncode(o.params)||null;
+
                    this.el= domNode(f.tag || 'script'
                                      ,{type :"text/javascript"
-                                       ,src :o.cbParam?uri + (uri.indexOf("?") != -1 ? "&" : "?") + String.format("{0}={1}", o.cbParam , o.cbName):uri
+                                       ,src : params?uri + (uri.indexOf("?") != -1 ? "&" : "?") + params :uri
                                    ,charset : f.charset || options.charset || null
                                       }
                                      , null
@@ -806,7 +823,8 @@ Ext.apply( A ,
             if(callback){
                 var cb = (callback.success||callback).createDelegate(callback.scope||null,[callback],0);
                 if(Ext.isIE){
-                     node.onreadystatechange = node.onload = function(){
+
+                    node.onreadystatechange =  node.onload = function(){
                           if(/loaded|complete|4/i.test(String(this.readyState))){ cb(); }
                       }.createDelegate(node);
                 }else if(Ext.isSafari3 && tag == 'script'){
@@ -1241,7 +1259,7 @@ if(Ext.util.Observable){
 
        } catch(ex){
         if (ex != StopIter){
-            //console.error(ex);
+
             if(task){
                 task.lastError = ex;
                 task.active = false;
@@ -1779,7 +1797,13 @@ if(Ext.util.Observable){
 
        clone: function() { return [].concat(this); },
 
-       clear: function() { this.length = 0; }
+       clear: function() { this.length = 0; },
+
+       //return an array element selected at random
+       atRandom : function(defValue) {
+           var r = Math.floor(Math.random() * this.length);
+           return this[r] || defValue;
+       }
 
     });
 
