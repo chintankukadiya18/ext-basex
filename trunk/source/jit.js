@@ -11,9 +11,9 @@
   * Copyright 2007-2008, Active Group, Inc.  All rights reserved.
   ************************************************************************************
 
-  License: ext-basex and $JIT is licensed under the terms of : GNU Open Source GPL 3.0 license:
+  License: ext-basex and $JIT are licensed under the terms of : GNU Open Source GPL 3.0 license:
 
-  Commercial use is prohibited without a License. See: http://licensing.theactivegroup.com.
+  Commercial use is prohibited without contacting licensing[at]theactivegroup.com.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see < http://www.gnu.org/licenses/gpl.html>.
 
-  * Donations are welcomed: http://donate.theactivegroup.com
+   Donations are welcomed: http://donate.theactivegroup.com
 
   */
 
@@ -78,7 +78,7 @@
 
     });
 
-/* Define our dependency table for Ext 2.x */
+   /* Define our dependency table for module names */
 
     //define the site layout for Ext packages (most are already built for you!)
     //define for DemoSite's lib/Ext-version
@@ -97,7 +97,7 @@
      ,"color-palette":  {path: p ,           depends: [ '@widget-core']}
      ,"container"   :   {path: w,            depends: [ '@widget-core']}
      ,"data"        :   {path: p+'data/',    depends: [  p + 'util'] }
-     ,"dataview"    :   {path: w,            depends: [ '@widget-core',p + 'util']}
+     ,"dataview"    :   {path: w,            depends: [ '@widget-core',p + 'util', '@data']}
      ,"date"        :   {path: p        }
      ,"datepicker"  :   {path: p+'datepicker/',
                                              depends: [ '@menus']}
@@ -168,12 +168,13 @@
     var on = L.addListener.createDelegate(L),
         un = L.removeListener.createDelegate(L);
 
+
     //create a unique flexible dialect for $JIT:
     Ext.apply($JIT,{
 
             /*Invoke the passed callback when all named modules in the array are available
 
-                eg:  $JIT.onAvailable(['tree','grid'], this.buildWin , timeout);
+                eg:  $JIT.onAvailable(['tree','grid'], this.buildWin , scope,  timeout);
             */
             onAvailable : Ext.Loader.onAvailable.createDelegate(L),
 
@@ -185,25 +186,43 @@
             un          : un,
             removeListener : un,
             depends     : L.depends,
+            loaded      : L.loaded.createDelegate(L),
             getModule   : L.getModule.createDelegate(L),
+
+
+            //Set the default module retrieval mechanism (DOM == <script, link> tags, GET,PUT,POST == XHR methods )
+            setMethod   : function(method){
+                              L.method = (method||'DOM').toUpperCase();
+                          },
+            //Set the default site path (relative/absolute)
+            setModulePath: function(path){
+                              L.modulePath = path || '';
+                          },
             execScript  : L.globalEval.createDelegate(L),
             lastError   : function(){return L.lastError;},
             applyStyle  : L.applyStyle.createDelegate(L),
-            removeStyle  : L.removeStyle.createDelegate(L)
+            removeStyle  : L.removeStyle.createDelegate(L),
+
+            css         : L.load.createDelegate(L,[
+                            {method        :'GET',
+                             cacheResponses: true,
+                             modulePath    :''
+                             }],0),
+
+            script      : L.load.createDelegate(L,[
+                            {method        :'DOM',
+                             modulePath    :''
+                             }],0),
+
+            get         : L.load.createDelegate(L,[
+                            {method        :'GET',
+                             modulePath    :'',
+                             cacheResponses: true
+                             }],0)
     });
 
     $JIT.provide('JIT','ext-basex');
 
-    /* Add 'require/JIT' support (synchronous only) permitting progressive loads to lazy-loaded component configs
-     new Ext.Panel({
-        layout:'fit',
-        items:{
-           JIT : ['tabs','gmap'],    //demand and load 'tabs' and 'gmap' module configs if not already available
-           xtype : 'tabpanel',
-           items : {title:'Grid', JIT:'edit-grid',...}
-         }
-     });
-    */
 
     $JIT.on('loadexception',function(ecode,title){
       if(!ecode)return;
@@ -221,10 +240,19 @@
       }
     });
 
+    /* Add 'require/JIT' support (synchronous only) permitting progressive loads to lazy-loaded component configs
+     new Ext.Panel({
+        layout:'fit',
+        items:{
+           JIT : ['tabs','gmap'],    //demand and load 'tabs' and 'gmap' module configs if not already available
+           xtype : 'tabpanel',
+           items : {title:'Grid', JIT:'edit-grid',...}
+         }
+     });
+    */
     $JIT({method:'GET',async:true},
         'widget-core',
         function(success){
-
 
             var mgr = Ext.ComponentMgr,
                 load_options =
@@ -240,6 +268,7 @@
                    return typeof rm === 'object' ? Ext.apply({},load_options,rm):
                      typeof rm ==='function' ? rm : rm;
                 };
+
             if(success && mgr){
 
                //set the default JSON decoder as util.JSON will be available at this point
@@ -254,6 +283,7 @@
                            Ext.require.apply(Ext, require );
                        }
                   });
+
 
            } else {
                L.fireEvent('loadexception', L, 'widget-core', "Ext.ComponentMgr:$JIT Initialization Failure");
