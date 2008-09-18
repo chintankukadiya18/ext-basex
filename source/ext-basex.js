@@ -1046,7 +1046,7 @@ if(Ext.util.Observable){
     };
     //normalize a resource to name-component hash
     /** @private */
-     modulate = function(moduleName, options){
+     var modulate = function(moduleName, options){
          if(!moduleName)return null;
         options || (options={});
         var mname = String(moduleName.name||moduleName),
