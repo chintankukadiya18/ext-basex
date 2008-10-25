@@ -51,21 +51,16 @@
 
     A.Queue = function(config) {
 
-        config = config ? (config.name ? config : {
-            name : config
-        }) : {};
+        config = config ? (config.name ? config : { name : config }) : {};
         Ext.apply(this, config, {
             name : 'q-default',
             priority : 5,
-            FIFO : true // false implies LIFO
-            ,
-            callback : null // optional callback when queue is emptied
-            ,
-            scope : null // scope of callback
-            ,
+            FIFO : true, // false implies LIFO
+            callback : null, // optional callback when queue is emptied
+            scope : null, // scope of callback
             suspended : false,
-            progressive : false
-                // if true, one queue item is dispatched per poll interval
+            progressive : false // if true, one queue item is dispatched per poll interval
+
             });
         this.requests = new Array();
         this.pending = false;
@@ -80,8 +75,7 @@
 
                 add : function(req) {
 
-                    var permit = A.events ? A.fireEvent('beforequeue', this,
-                            req) : true;
+                    var permit = A.events ? A.fireEvent('beforequeue', this, req) : true;
                     if (permit !== false) {
                         this.requests.push(req);
                         this.pending = true;
@@ -93,43 +87,54 @@
                 },
                 suspended : false,
                 activeRequest : null,
-                next : function() {
-                    var req = this.requests[this.FIFO ? 'shift' : 'pop']();
-                    this.pending = !!this.requests.length;
-                    return req;
-                }
+                next : function(peek) {
+                    var req = peek ?
+                        this.requests[this.FIFO ? 'first' : 'last']()
+                       :this.requests[this.FIFO ? 'shift' : 'pop']();
 
-                ,
+                    if (this.requests.length == 0) {
+                        // queue emptied callback
+                        this.pending = false;
+                        if (this.callback) {
+                            this.callback.call(this.scope || null, this);
+                        }
+                        if (A.events) { A.fireEvent('queueempty', this); }
+                    }
+                    return req || null;
+                },
+
+                /**
+                * clear the queue of any remaining (pending) requests
+                */
                 clear : function() {
+                    this.suspend();
+                    A.pendingRequests -= this.requests.length;
                     this.requests.length = 0;
                     this.pending = false;
-                    if (A.events) {
-                        A.fireEvent('queueempty', this)
-                    };
-                }
+                    this.resume();
+                    this.next(); //force the empty callback/event
+
+                },
                 // suspend/resume from dispatch control
-                ,
+
                 suspend : function() {
                     this.suspended = true;
                 },
+
                 resume : function() {
                     this.suspended = false;
                 },
-                requestNext : function() {
+
+                requestNext : function(peek) {
                     var req;
                     this.activeRequest = null;
-                    if (!this.suspended && (req = this.next())) {
-                        A.pendingRequests--;
-                        this.activeRequest = req.active ? A.request.apply(A,
-                                req) : null;
-                        if (this.requests.length == 0) {
-                            // queue emptied callback
-                            if (this.callback) {
-                                this.callback.call(this.scope || null, this);
-                            }
-                            this.clear();
+                    if (!this.suspended && (req = this.next(peek))) {
+                        if(req.active){  //was it aborted
+                            this.activeRequest = A.request.apply(A,req);
+                            A.pendingRequests--;
+                        } else {
+                            return this.requestNext(peek);
                         }
-
                     }
                     return this.activeRequest;
                 }
@@ -179,9 +184,8 @@
         ,
         removeQueue : function(q) {
             if (q && (q = this.getQueue(q.name || q))) {
-                q.suspend();
                 q.clear(); // purge any pending requests
-                this.priorityQueues[q.priority].remove(q);
+                this.priorityQueues[q.priority].remove(q.name);
                 delete this.queues[q.name];
             }
         },
@@ -190,18 +194,15 @@
                 this.started = true;
                 this.dispatch();
             }
+            return this;
         }
 
         ,
         suspendAll : function() {
-            forEach(this.queues, function(Q) {
-                        Q.suspend();
-                    });
+            forEach(this.queues, function(Q) { Q.suspend(); });
         },
         resumeAll : function() {
-            forEach(this.queues, function(Q) {
-                        Q.resume();
-                    });
+            forEach(this.queues, function(Q) { Q.resume();  });
             this.start();
         }
 
@@ -217,47 +218,57 @@
         ,
         stop : function() {
             this.started = false;
-        }
+            return this;
+        },
 
         /** private
          * main Request dispatch loop. This keeps the maximum allowed number of
          * requests going at any one time (based on defined queue priority and
          * dispatch mode (see progressive).
          */
-        ,
-        dispatch : function() {
+
+        dispatch   : function(){
             var qm = this, qmq = qm.queues;
-            var disp = function(qName) {
-                var q = qmq[qName];
-                if (q && !q.suspended) {
-                    while (q.pending && !q.suspended && A.pendingRequests
-                            && A.activeRequests < A.maxConcurrentRequests) {
-                        q.requestNext();
-                        if (q.progressive || qm.progressive) {
-                            break;
-                        } // progressive, take the first one off each queue
-                            // only
+            var quit=(A.activeRequests > A.maxConcurrentRequests);
+            while(A.pendingRequests && !quit){
+
+               var disp = function(qName) {
+                    var q = qmq[qName], AR;
+
+                    while (q && !q.suspended && q.pending && q.requestNext()) {
+
+                        quit || (quit = A.activeRequests > A.maxConcurrentRequests);
+                        if(quit)break;
+
+                        // progressive, take the first one off each queue only
+                        if (q.progressive || qm.progressive) { break;}
+
+                     }
+                     // keep going?
+                     if(quit)return false;
+                };
+
+                Ext.each(this.priorityQueues, function(pqueue) {
+                    // pqueue == array of queue names
+
+                    if(!!pqueue.length){
+                        Ext.each(pqueue , disp, this);
                     }
-                    // keep going?
-                    return !!A.pendingRequests
-                            ? (A.activeRequests < A.maxConcurrentRequests)
-                            : false;
-                }
-            };
+                    quit || (quit = A.activeRequests > A.maxConcurrentRequests);
 
-            Ext.each(this.priorityQueues, function(queues) {
-                // queues == array of queue names
-                if (!A.pendingRequests) {
-                    return false;
-                }
-                return Ext.each(queues || new Array(), disp, this) === undefined
-                        ? true
-                        : false;
-            }, this);
+                    if(quit)return false;
 
-            !!A.pendingRequests
-                    ? this.dispatch.defer(this.quantas, this)
-                    : this.stop();
+                }, this);
+
+            }
+
+
+            if(A.pendingRequests || quit){
+                this.dispatch.defer(this.quantas, this);
+            } else{
+                this.stop();
+            }
+
 
         }
     });
@@ -424,7 +435,7 @@
 
             callback = callback || {};
             var responseObject = null;
-            this.activeRequests--;
+            A.activeRequests--;
 
             if (!o.status.isError) {
                 o.status = this.getHttpStatus(o.conn);
@@ -432,8 +443,7 @@
                  * create and enhance the response with proper status and XMLDOM
                  * if necessary
                  */
-                responseObject = this.createResponseObject(o,
-                        callback.argument, isAbort);
+                responseObject = this.createResponseObject(o, callback.argument, isAbort);
             }
 
             if (o.status.isError) {
@@ -442,11 +452,9 @@
                  * disabled during XML-DOM creation? And mixin everything the
                  * XHR object had to offer as well
                  */
-                responseObject = Ext.apply({}, responseObject || {}, this
-                                .createExceptionObject(o.tId,
-                                        callback.argument, (isAbort
-                                                ? isAbort
-                                                : false)));
+                responseObject = Ext.apply({}, responseObject || {},
+                        this.createExceptionObject(o.tId, callback.argument,
+                          (isAbort? isAbort: false)));
 
             }
 
@@ -463,8 +471,7 @@
                             || this.fireEvent('response', o, responseObject,
                                     callback, isAbort) !== false) {
                         if (callback.success) {
-                            callback.success.call(callback.scope || null,
-                                    responseObject);
+                            callback.success.call(callback.scope || null,responseObject);
                         }
                     }
                 } else {
@@ -472,8 +479,7 @@
                             || this.fireEvent('exception', o, responseObject,
                                     callback, isAbort) !== false) {
                         if (callback.failure) {
-                            callback.failure.call(callback.scope || null,
-                                    responseObject);
+                            callback.failure.call(callback.scope || null, responseObject);
                         }
                     }
                 }
@@ -596,6 +602,7 @@
                                 ? this.decodeJSON(obj.responseText)
                                 : null;
                     } catch (exJSON) {
+
                         o.status.isError = true; // trigger future exception
                                                     // callback
                         o.status.error = exJSON;
@@ -652,10 +659,15 @@
                                     options) !== false) {
 
                 // Named priority queues
-                if ((options.queue || (options.queue = this.queueAll || null))
-                        && !options.queued) {
-                    var q = options.queue, qname = q.name || 'default', qm = this.queueManager;
-                    q = qm.getQueue(qname) || qm.createQueue(q);
+                if (!options.queued && (options.queue || (options.queue = this.queueAll || null)) ) {
+
+                    if(options.queue === true){ options.queue = {name:'q-default'}; }
+
+                    var oq = options.queue;
+
+                    var qname = oq.name || oq , qm = this.queueManager;
+
+                    var q = qm.getQueue(qname) || qm.createQueue(oq);
                     options.queue = q;
                     options.queued = true;
 
@@ -837,11 +849,11 @@
             var o = this.getConnectionObject(uri, options);
 
             if (!o || o.status.isError) {
-                return Ext
-                        .apply(o, this.handleTransactionResponse(o, callback));
+                return Ext.apply(o, this.handleTransactionResponse(o, callback));
             } else {
 
                 o.options = options;
+                A.activeRequests++;
                 try {
                     o.conn.open(method.toUpperCase(), uri, options.async,
                             options.userId, options.password);
@@ -854,7 +866,7 @@
                     return Ext.apply(o, this.handleTransactionResponse(o,
                                     callback));
                 }
-                this.activeRequests++;
+
                 if (this.useDefaultXhrHeader) {
                     if (!this.defaultHeaders['X-Requested-With']) {
                         this.initHeader('X-Requested-With',
@@ -885,12 +897,11 @@
                                     callback));
                 }
 
-                return options.async ? o : Ext.apply(o, this
-                                .handleTransactionResponse(o, callback));
+                return options.async ? o : Ext.apply(o, this.handleTransactionResponse(o, callback));
             }
-        }
+        },
 
-        ,
+
         abort : function(o, callback, isTimeout) {
 
             if (o && o.queued && o.request) {
@@ -908,8 +919,7 @@
 
                 o.status.isAbort = !(o.status.isTimeout = isTimeout || false);
                 if (this.events) {
-                    this
-                            .fireEvent(isTimeout ? 'timeout' : 'abort', o,
+                    this.fireEvent(isTimeout ? 'timeout' : 'abort', o,
                                     callback);
                 }
 
