@@ -2292,11 +2292,17 @@
         };
     }
 
-    forEach([Date, Number, RegExp, Boolean], function(t) {
+    forEach([Number, RegExp, Boolean], function(t) {
                 t.prototype.clone = function(deep) {
                     return deep ? new t(this) : this;
                 }
             });
+
+    Ext.applyIf(Date.prototype, {
+        clone  : function(deep){
+            return deep? new Date(this.getTime()) : this ;
+        }
+    });
 
     // enumerate custom class properties (not prototypes)
     // usually only called by the global forEach function
