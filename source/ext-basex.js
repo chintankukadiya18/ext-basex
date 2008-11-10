@@ -1536,6 +1536,7 @@
                             task.active = false;
                         }
                         this.lastError = ex;
+
                         this.fireEvent('loadexception', this, task
                                         ? task.currentModule
                                         : null, ex);
@@ -2213,28 +2214,26 @@
                     }
                     return t;
 
-                }
+                },
+                 /*
+                 * Array forEach Iteration based on previous work by: Dean Edwards
+                 * (http://dean.edwards.name/weblog/2006/07/enum/) Gecko already
+                 * supports forEach for Arrays : see
+                 * http://developer.mozilla.org/en/docs/Core_JavaScript_1.5_Reference:Objects:Array:forEach
+                 */
+                forEach : function( block, scope) {
+
+                    if (typeof block != "function") {
+                        throw new TypeError();
+                    }
+                    var i = 0, length = this.length;
+                    while (i < length) {
+                        block.call(scope, this[i], i++, this);
+                    }
+                  }
 
             });
 
-    if (!Array.forEach) {
-        /*
-         * Array forEach Iteration based on previous work by: Dean Edwards
-         * (http://dean.edwards.name/weblog/2006/07/enum/) Gecko already
-         * supports forEach for Arrays : see
-         * http://developer.mozilla.org/en/docs/Core_JavaScript_1.5_Reference:Objects:Array:forEach
-         */
-        Array.forEach = function(array, block, scope) {
-
-            if (typeof block != "function") {
-                throw new TypeError();
-            }
-            var i = 0, length = array.length;
-            while (i < length) {
-                block.call(scope, array[i], i++, array);
-            }
-        };
-    }
 
     // globally resolve forEach enumeration
     window.forEach = function(object, block, context) {
@@ -2251,12 +2250,13 @@
                 // the object implements a custom forEach method so use that
                 object.forEach(block, context);
                 return;
+
             } else if (typeof object == "string") {
                 // the object is a string
                 resolve = String;
             } else if (typeof object.length == "number") {
                 // the object is array-like
-                resolve = Array;
+                return Array.prototype.forEach.call(object, block, context);
             }
 
             return resolve.forEach(object, block, context);
