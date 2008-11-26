@@ -83,7 +83,7 @@
     //define the site layout for Ext packages (most are already built for you!)
     //define for DemoSite's lib/Ext-version
 
-    var libv = 'lib/Ext-'+Ext.version+'/'
+    var libv = 'lib/Ext-'+Ext.version+'/';
     var p = libv + 'package/';
     var l = p + 'layout/';
     var d = p + 'dragdrop/';
