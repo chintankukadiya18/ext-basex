@@ -1,6 +1,6 @@
 /* global Ext */
 /*
- * ext-basex 3.1
+ * ext-basex 3.2
  * ***********************************************************************************
  *
  * Ext.lib.Ajax enhancements: - adds EventManager Support to Ext.lib.Ajax (if
@@ -20,12 +20,11 @@
  *
  * ***********************************************************************************
  * Author: Doug Hendricks. doug[always-At]theactivegroup.com Copyright
- * 2007-2008, Active Group, Inc. All rights reserved.
+ * 2007-2009, Active Group, Inc. All rights reserved.
  * ***********************************************************************************
  *
  * License: ext-basex is licensed under the terms of : GNU Open Source GPL 3.0
- * license:
- *
+  *
  * Commercial use is prohibited without a Developer License, see:
  * http://licensing.theactivegroup.com.
  *
@@ -72,72 +71,72 @@
 
     Ext.extend(A.Queue, Object, {
 
-                add : function(req) {
+        add : function(req) {
 
-                    var permit = A.events ? A.fireEvent('beforequeue', this, req) : true;
-                    if (permit !== false) {
-                        this.requests.push(req);
-                        this.pending = true;
-                        A.pendingRequests++;
-                        if (this.manager) {
-                            this.manager.start();
-                        }
-                    }
-                },
-                suspended : false,
-                activeRequest : null,
-                next : function(peek) {
-                    var req = peek ?
-                        this.requests[this.FIFO ? 'first' : 'last']()
-                       :this.requests[this.FIFO ? 'shift' : 'pop']();
-
-                    if (this.requests.length == 0) {
-                        // queue emptied callback
-                        this.pending = false;
-                        if (this.callback) {
-                            this.callback.call(this.scope || null, this);
-                        }
-                        if (A.events) { A.fireEvent('queueempty', this); }
-                    }
-                    return req || null;
-                },
-
-                /**
-                * clear the queue of any remaining (pending) requests
-                */
-                clear : function() {
-                    this.suspend();
-                    A.pendingRequests -= this.requests.length;
-                    this.requests.length = 0;
-                    this.pending = false;
-                    this.resume();
-                    this.next(); //force the empty callback/event
-
-                },
-                // suspend/resume from dispatch control
-
-                suspend : function() {
-                    this.suspended = true;
-                },
-
-                resume : function() {
-                    this.suspended = false;
-                },
-
-                requestNext : function(peek) {
-                    var req;
-                    this.activeRequest = null;
-                    if (!this.suspended && (req = this.next(peek))) {
-                        if(req.active){  //was it aborted
-                            this.activeRequest = A.request.apply(A,req);
-                            A.pendingRequests--;
-                        } else {
-                            return this.requestNext(peek);
-                        }
-                    }
-                    return this.activeRequest;
+            var permit = A.events ? A.fireEvent('beforequeue', this, req) : true;
+            if (permit !== false) {
+                this.requests.push(req);
+                this.pending = true;
+                A.pendingRequests++;
+                if (this.manager) {
+                    this.manager.start();
                 }
-            });
+            }
+        },
+        suspended : false,
+        activeRequest : null,
+        next : function(peek) {
+            var req = peek ?
+                this.requests[this.FIFO ? 'first' : 'last']()
+               :this.requests[this.FIFO ? 'shift' : 'pop']();
+
+            if (this.requests.length == 0) {
+                // queue emptied callback
+                this.pending = false;
+                if (this.callback) {
+                    this.callback.call(this.scope || null, this);
+                }
+                if (A.events) { A.fireEvent('queueempty', this); }
+            }
+            return req || null;
+        },
+
+        /**
+        * clear the queue of any remaining (pending) requests
+        */
+        clear : function() {
+            this.suspend();
+            A.pendingRequests -= this.requests.length;
+            this.requests.length = 0;
+            this.pending = false;
+            this.resume();
+            this.next(); //force the empty callback/event
+
+        },
+        // suspend/resume from dispatch control
+
+        suspend : function() {
+            this.suspended = true;
+        },
+
+        resume : function() {
+            this.suspended = false;
+        },
+
+        requestNext : function(peek) {
+            var req;
+            this.activeRequest = null;
+            if (!this.suspended && (req = this.next(peek))) {
+                if(req.active){  //was it aborted
+                    this.activeRequest = A.request.apply(A,req);
+                    A.pendingRequests--;
+                } else {
+                    return this.requestNext(peek);
+                }
+            }
+            return this.activeRequest;
+        }
+    });
 
     A.QueueManager = function(config) {
 
@@ -160,9 +159,9 @@
 
         getQueue : function(name) {
             return this.queues[name];
-        }
+        },
 
-        ,
+
         createQueue : function(config) {
             if (!config) {
                 return null;
@@ -178,9 +177,9 @@
             }
 
             return q;
-        }
+        },
         // Remove a Queue by passed name or Queue Object reference
-        ,
+
         removeQueue : function(q) {
             if (q && (q = this.getQueue(q.name || q))) {
                 q.clear(); // purge any pending requests
@@ -188,22 +187,24 @@
                 delete this.queues[q.name];
             }
         },
+
         start : function() {
             if (!this.started) {
                 this.started = true;
                 this.dispatch();
             }
             return this;
-        }
+        },
 
-        ,
+
         suspendAll : function() {
             forEach(this.queues, function(Q) { Q.suspend(); });
         },
+
         resumeAll : function() {
             forEach(this.queues, function(Q) { Q.resume();  });
             this.start();
-        }
+        },
 
         /**
          * Default Dispatch mode: progressive false to exhaust a priority queue
@@ -211,10 +212,10 @@
          * request from each priority queue until all queues exhausted. This
          * option may be set on the Queue itself as well.
          */
-        ,
-        progressive : false
 
-        ,
+        progressive : false,
+
+
         stop : function() {
             this.started = false;
             return this;
@@ -287,7 +288,7 @@
 
         // Specify the maximum allowed during concurrent Queued browser (XHR)
         // requests
-        maxConcurrentRequests : 10,
+        maxConcurrentRequests : Ext.isIE ? Ext.value(window.maxConnectionsPerServer, 2) : 4,
 
         /* set True as needed, to coerce IE to use older ActiveX interface */
         forceActiveX : false,
@@ -303,7 +304,7 @@
                 tId : transactionId
             }, http;
             try {
-                if (Ext.isIE7 && !!this.forceActiveX) {
+                if (!!this.forceActiveX) {
                     throw ("IE7forceActiveX");
                 }
                 obj.conn = new XMLHttpRequest();
@@ -320,83 +321,44 @@
             }
             return obj;
 
-        }
+        },
 
         /* Replaceable Form encoder */
-        ,
-        encoder : encodeURIComponent
 
-        ,
+        encoder : encodeURIComponent,
+
         serializeForm : function(form) {
-            if (typeof form == 'string') {
-                form = (document.getElementById(form) || document.forms[form]);
-            }
-
-            var el, name, val, disabled, data = '', hasSubmit = false;
-            for (var i = 0; i < form.elements.length; i++) {
-                el = form.elements[i];
-                disabled = form.elements[i].disabled;
-                name = form.elements[i].name;
-                val = form.elements[i].value;
-
-                if (!disabled && name) {
-                    switch (el.type) {
-                        case 'select-one' :
-                        case 'select-multiple' :
-                            for (var j = 0; j < el.options.length; j++) {
-                                if (el.options[j].selected) {
-                                    if (Ext.isIE) {
-                                        data += this.encoder(name)
-                                                + '='
-                                                + this
-                                                        .encoder(el.options[j].attributes['value'].specified
-                                                                ? el.options[j].value
-                                                                : el.options[j].text)
-                                                + '&';
-                                    } else {
-                                        data += this.encoder(name)
-                                                + '='
-                                                + this.encoder(el.options[j]
-                                                        .hasAttribute('value')
-                                                        ? el.options[j].value
-                                                        : el.options[j].text)
-                                                + '&';
-                                    }
-                                }
+            var fElements = form.elements || (document.forms[form] || Ext.getDom(form)).elements,
+                        hasSubmit = false,
+                        encoder = this.encoder,
+                        element,
+                        options,
+                        name,
+                        val,
+                        data = '',
+                        type;
+            Ext.each(fElements, function(element) {
+                name = element.name;
+                type = element.type;
+                if (!element.disabled && name){
+                    if(/select-(one|multiple)/i.test(type)){
+                        Ext.each(element.options, function(opt) {
+                            if (opt.selected) {
+                                data += String.format("{0}={1}&",
+                                     encoder(name),
+                                     (opt.hasAttribute ? opt.hasAttribute('value') : opt.getAttribute('value') !== null) ? opt.value : opt.text);
                             }
-                            break;
-                        case 'radio' :
-                        case 'checkbox' :
-                            if (el.checked) {
-                                data += this.encoder(name) + '='
-                                        + this.encoder(val) + '&';
-                            }
-                            break;
-                        case 'file' :
-
-                        case undefined :
-
-                        case 'reset' :
-
-                        case 'button' :
-
-                            break;
-                        case 'submit' :
-                            if (hasSubmit === false) {
-                                data += this.encoder(name) + '='
-                                        + this.encoder(val) + '&';
-                                hasSubmit = true;
-                            }
-                            break;
-                        default :
-                            data += this.encoder(name) + '='
-                                    + this.encoder(val) + '&';
-                            break;
+                        });
+                    } else if(!/file|undefined|reset|button/i.test(type)) {
+                        if(!(/radio|checkbox/i.test(type) && !element.checked) && !(type == 'submit' && hasSubmit)){
+                            data += encoder(name) + '=' + encoder(element.value) + '&';
+                            hasSubmit = /submit/i.test(type);
+                        }
                     }
                 }
-            }
-            data = data.substr(0, data.length - 1);
-            return data;
+            });
+            return data.substr(0, data.length - 1);
+
         },
         getHttpStatus : function(reqObj) {
 
@@ -510,8 +472,8 @@
                 responseText : '',
                 responseStream : null,
                 responseJSON : null,
-                getResponseHeader : {},
-                getAllResponseHeaders : ''
+                getResponseHeader : Ext.emptyFn,
+                getAllResponseHeaders : Ext.emptyFn
             };
 
             var headerObj = {}, headerStr = '';
@@ -612,11 +574,11 @@
             o.status.proxied = !!o.proxied;
 
             Ext.apply(obj, {
-                        tId : o.tId,
-                        status : o.status.status,
+                        tId     : o.tId,
+                        status  : o.status.status,
                         statusText : o.status.statusText,
-                        getResponseHeader : headerObj,
-                        getAllResponseHeaders : headerStr,
+                        getResponseHeader : function(header){return headerObj[header];},
+                        getAllResponseHeaders : function(){return headerStr},
                         fullStatus : o.status
                     });
 
@@ -701,7 +663,7 @@
                     method = 'POST';
                     data = options.xmlData;
                 } else if (options.jsonData) {
-                    cType || (cType = 'application/json');
+                    cType || (cType = 'application/json; charset=utf-8');
                     method = 'POST';
                     data = typeof options.jsonData == 'object' ? Ext
                             .encode(options.jsonData) : options.jsonData;
@@ -722,9 +684,9 @@
             }
             return null;
 
-        }
+        },
         /** private */
-        ,
+
         getConnectionObject : function(uri, options) {
             var o, f, e = Ext.emptyFn;
             var tId = this.transactionId;
@@ -751,6 +713,7 @@
                             },
                             setRequestHeader : e,
                             getAllResponseHeaders : e,
+                            getResponseHeader : e,
                             onreadystatechange : null,
                             readyState : 0,
                             status : 0,
@@ -840,9 +803,9 @@
             } finally {
                 return o;
             }
-        }
+        },
         /** private */
-        ,
+
         makeRequest : function(method, uri, callback, postData, options) {
 
             var o = this.getConnectionObject(uri, options);
@@ -928,9 +891,9 @@
             } else {
                 return false;
             }
-        }
+        },
 
-        ,
+
         clearAuthenticationCache : function(url) {
 
             try {
@@ -1012,60 +975,60 @@
 
         Ext.apply(A, {
 
-                    events : {
-                        request : true,
-                        beforesend : true,
-                        response : true,
-                        exception : true,
-                        abort : true,
-                        timeout : true,
-                        readystatechange : true,
-                        beforequeue : true,
-                        queue : true,
-                        queueempty : true
-                    }
+            events : {
+                request : true,
+                beforesend : true,
+                response : true,
+                exception : true,
+                abort : true,
+                timeout : true,
+                readystatechange : true,
+                beforequeue : true,
+                queue : true,
+                queueempty : true
+            },
 
-                    /*
-                     * onStatus define eventListeners for a single (or array) of
-                     * HTTP status codes.
-                     */
-                    ,
-                    onStatus : function(status, fn, scope, options) {
-                        var args = Array.prototype.slice.call(arguments, 1);
-                        status = new Array().concat(status || new Array());
-                        Ext.each(status, function(statusCode) {
-                                    statusCode = parseInt(statusCode, 10);
-                                    if (!isNaN(statusCode)) {
-                                        var ev = 'status:' + statusCode;
-                                        this.events[ev]
-                                                || (this.events[ev] = true);
-                                        this.on.apply(this, [ev].concat(args));
-                                    }
-                                }, this);
-                    }
-                    /*
-                     * unStatus unSet eventListeners for a single (or array) of
-                     * HTTP status codes.
-                     */
-                    ,
-                    unStatus : function(status, fn, scope, options) {
-                        var args = Array.prototype.slice.call(arguments, 1);
-                        status = new Array().concat(status || new Array());
-                        Ext.each(status, function(statusCode) {
-                                    statusCode = parseInt(statusCode, 10);
-                                    if (!isNaN(statusCode)) {
-                                        var ev = 'status:' + statusCode;
-                                        this.un.apply(this, [ev].concat(args));
-                                    }
-                                }, this);
-                    },
-                    onReadyState : function() {
-                        this.fireEvent.apply(this, ['readystatechange']
-                                        .concat(Array.prototype.slice.call(
-                                                arguments, 0)));
-                    }
+            /*
+             * onStatus define eventListeners for a single (or array) of
+             * HTTP status codes.
+             */
 
-                }, new Ext.util.Observable());
+            onStatus : function(status, fn, scope, options) {
+                var args = Array.prototype.slice.call(arguments, 1);
+                status = new Array().concat(status || new Array());
+                Ext.each(status, function(statusCode) {
+                            statusCode = parseInt(statusCode, 10);
+                            if (!isNaN(statusCode)) {
+                                var ev = 'status:' + statusCode;
+                                this.events[ev]
+                                        || (this.events[ev] = true);
+                                this.on.apply(this, [ev].concat(args));
+                            }
+                        }, this);
+            },
+            /*
+             * unStatus unSet eventListeners for a single (or array) of
+             * HTTP status codes.
+             */
+
+            unStatus : function(status, fn, scope, options) {
+                var args = Array.prototype.slice.call(arguments, 1);
+                status = new Array().concat(status || new Array());
+                Ext.each(status, function(statusCode) {
+                            statusCode = parseInt(statusCode, 10);
+                            if (!isNaN(statusCode)) {
+                                var ev = 'status:' + statusCode;
+                                this.un.apply(this, [ev].concat(args));
+                            }
+                        }, this);
+            },
+            onReadyState : function() {
+                this.fireEvent.apply(this, ['readystatechange']
+                                .concat(Array.prototype.slice.call(
+                                        arguments, 0)));
+            }
+
+        }, new Ext.util.Observable());
 
         Ext.hasBasex = true;
 
@@ -1141,90 +1104,90 @@
                     });
 
             this.addEvents({
-                        /**
-                         * @event loadexception Fires when any exception is
-                         *        raised returning false prevents any subsequent
-                         *        pending module load requests
-                         * @param {Ext.ux.ModuleManager}
-                         *            this
-                         * @param {String}
-                         *            module -- the module object
-                         * @param {Object}
-                         *            error -- An error object containing:
-                         *            httpStatus, httpStatusText, error object
-                         */
-                        "loadexception" : true,
+                /**
+                 * @event loadexception Fires when any exception is
+                 *        raised returning false prevents any subsequent
+                 *        pending module load requests
+                 * @param {Ext.ux.ModuleManager}
+                 *            this
+                 * @param {String}
+                 *            module -- the module object
+                 * @param {Object}
+                 *            error -- An error object containing:
+                 *            httpStatus, httpStatusText, error object
+                 */
+                "loadexception" : true,
 
-                        /**
-                         * @event alreadyloaded Fires when the ModuleManager
-                         *        determines that the requested module has
-                         *        already been loaded
-                         * @param {Ext.ux.ModuleManager}
-                         *            this
-                         * @param {String}
-                         *            module -- the module object
-                         */
-                        "alreadyloaded" : true,
+                /**
+                 * @event alreadyloaded Fires when the ModuleManager
+                 *        determines that the requested module has
+                 *        already been loaded
+                 * @param {Ext.ux.ModuleManager}
+                 *            this
+                 * @param {String}
+                 *            module -- the module object
+                 */
+                "alreadyloaded" : true,
 
-                        /**
-                         * @event load Fires when the retrieved content has been
-                         *        successfully loaded
-                         * @param {Ext.ux.ModuleManager}
-                         *            this
-                         * @param {String}
-                         *            module -- the module name
-                         * @param {Object}
-                         *            response -- the Ajax response object
-                         * @param {String}
-                         *            contents -- the raw text content retrieved
-                         * @param {Boolean}
-                         *            executed -- true if the resource was
-                         *            executed into the target context.
-                         */
-                        "load" : true,
+                /**
+                 * @event load Fires when the retrieved content has been
+                 *        successfully loaded
+                 * @param {Ext.ux.ModuleManager}
+                 *            this
+                 * @param {String}
+                 *            module -- the module name
+                 * @param {Object}
+                 *            response -- the Ajax response object
+                 * @param {String}
+                 *            contents -- the raw text content retrieved
+                 * @param {Boolean}
+                 *            executed -- true if the resource was
+                 *            executed into the target context.
+                 */
+                "load" : true,
 
-                        /**
-                         * @event beforeload Fires when the request has
-                         *        successfully completed and just prior to eval
-                         *        returning false prevents the content (of this
-                         *        module) from being loaded (eval'ed)
-                         * @param {Ext.ux.ModuleManager}
-                         *            this
-                         * @param {String}
-                         *            module -- the module name
-                         * @param {Object}
-                         *            response - the Ajax response object
-                         * @param {String}
-                         *            contents -- the raw text content retrieved
-                         */
-                        "beforeload" : true,
+                /**
+                 * @event beforeload Fires when the request has
+                 *        successfully completed and just prior to eval
+                 *        returning false prevents the content (of this
+                 *        module) from being loaded (eval'ed)
+                 * @param {Ext.ux.ModuleManager}
+                 *            this
+                 * @param {String}
+                 *            module -- the module name
+                 * @param {Object}
+                 *            response - the Ajax response object
+                 * @param {String}
+                 *            contents -- the raw text content retrieved
+                 */
+                "beforeload" : true,
 
-                        /**
-                         * @event complete Fires when all module load request
-                         *        have completed (successfully or not)
-                         * @param {Ext.ux.ModuleManager}
-                         *            this
-                         * @param {Boolen}
-                         *            success
-                         * @param {Array}
-                         *            loaded -- the modules now available as a
-                         *            result of (or previously -- already
-                         *            loaded) the last load operation.
-                         * @param {Array}
-                         *            executed -- modules that were executed
-                         *            (evaled) as a result of (or previously
-                         *            executed) the last load operation.
-                         */
-                        "complete" : true,
+                /**
+                 * @event complete Fires when all module load request
+                 *        have completed (successfully or not)
+                 * @param {Ext.ux.ModuleManager}
+                 *            this
+                 * @param {Boolen}
+                 *            success
+                 * @param {Array}
+                 *            loaded -- the modules now available as a
+                 *            result of (or previously -- already
+                 *            loaded) the last load operation.
+                 * @param {Array}
+                 *            executed -- modules that were executed
+                 *            (evaled) as a result of (or previously
+                 *            executed) the last load operation.
+                 */
+                "complete" : true,
 
-                        /**
-                         * @event timeout Fires when module {@link #load} or
-                         *        {@link #onAvailable} requests have timed out.
-                         * @param {Ext.ux.ModuleManager}
-                         *            this
-                         */
-                        "timeout" : true
-                    });
+                /**
+                 * @event timeout Fires when module {@link #load} or
+                 *        {@link #onAvailable} requests have timed out.
+                 * @param {Ext.ux.ModuleManager}
+                 *            this
+                 */
+                "timeout" : true
+            });
             Ext.ux.ModuleManager.superclass.constructor.call(this);
 
         };
@@ -1280,11 +1243,11 @@
              * @cfg {Boolean} disableCaching True to ensure the the browser's
              *      cache is bypassed when retrieving resources.
              */
-            disableCaching : false
+            disableCaching : false,
 
             /** @private */
-            ,
-            modules : {}
+
+            modules : {},
 
             /**
              * @cfg {String} method The default request method used to retrieve
@@ -1298,23 +1261,23 @@
              *      <li>PUT</li>
              *      </ul>
              */
-            ,
-            method : 'GET'
+
+            method : 'GET',
 
             /**
              * @cfg {Boolean} noExecute Permits retrieval of a resource without
              *      script execution of the results. This option may also be
              *      changed in-line during a {@link #load) operation.
              */
-            ,
-            noExecute : false
+
+            noExecute : false,
             /**
              * @cfg {Boolean} asynchronous Sets the default behaviour for AJAX
              *      requests onlu This option may also be changed in-line
              *      (async: true) during a {@link #load) operation.
              */
-            ,
-            asynchronous : true
+
+            asynchronous : true,
 
             /**
              * @cfg {Boolean} cacheResponses True, saves any content received in
@@ -1323,48 +1286,48 @@
              * This option may also be changed in-line during a
              * {@link #load) operation.
              */
-            ,
-            cacheResponses : false
+
+            cacheResponses : false,
 
             /**
              * @cfg {Integer} onAvailable/load method timeout value in
              *      milliseconds
              */
-            ,
-            timeout : 30000
+
+            timeout : 30000,
 
             /**
              * @cfg {Boolean} True retains the resulting content within each
              *      module object for debugging.
              */
-            ,
-            debug : false
+
+            debug : false,
 
             /** @private */
-            ,
-            loadStack : new Array()
 
-            ,
+            loadStack : new Array(),
+
+
             loaded : function(name) {
                 var module;
                 return (module = this.getModule(name))
                         ? module.loaded === true
                         : false;
-            }
+            },
 
-            ,
+
             getModule : function(name) {
                 if (name) {
                     name = name.name ? name.name : modulate(name, false).name;
                 }
                 return name ? this.modules[name] : null;
-            }
+            },
             /*
              * A mechanism for modules to identify their presence when loaded
              * via conventional <script> tags @param {String} module names(s)
              * Usage: <pre><code>Ext.Loader.provides('moduleA', 'moduleB');</code></pre>
              */
-            ,
+
             createModule : function(name, extras) {
                 var mod;
                 mod = this.getModule(name);
@@ -1381,7 +1344,7 @@
                 }
 
                 return mod;
-            }
+            },
 
             /**
              * Assert loaded status of module name arguments and invoke
@@ -1397,7 +1360,7 @@
              * @param {integer}
              *            timeout The timeout value in milliseconds.
              */
-            ,
+
             onAvailable : function(modules, callback, scope, timeout, options) {
 
                 if (arguments.length < 2) {
@@ -1471,7 +1434,7 @@
 
                 return block.retry();
 
-            }
+            },
 
             /**
              * A mechanism for modules to identify their presence when loaded
@@ -1484,7 +1447,7 @@
              * Ext.Loader.provides('moduleA', 'moduleB');
              * </code></pre>
              */
-            ,
+
             provides : function() {
                 Array.prototype.forEach.call(arguments, function(module) {
 
@@ -1499,7 +1462,7 @@
 
                         }, this);
 
-            }
+            },
             /**
              * load external resources in dependency order alternate load
              * syntax:
@@ -1518,7 +1481,7 @@
              *            to be execute in sequential order
              */
 
-            ,
+
             load : function(modList) {
 
                 try {
@@ -1544,9 +1507,9 @@
                 }
 
                 return task;
-            }
+            },
 
-            ,
+
             globalEval : function(data, scope, context) {
                 scope || (scope = window);
 
@@ -1572,9 +1535,9 @@
                 }
 
             },
-            styleAdjust : null
+            styleAdjust : null,
 
-            ,
+
             applyStyle : function(module, styleRules, target) {
                 var rules;
                 if (module = this.getModule(module)) {
@@ -1612,7 +1575,7 @@
                     }
                 }
                 return rules; // the style element created
-            }
+            },
 
             /**
              * Remove a style element
@@ -1622,20 +1585,19 @@
              *            module A Ext.ux.ModuleManager.module or dom Node
              * @return {Ext.Element} the element removed.
              */
-            ,
+
             removeStyle : function(module) {
                 return this.removeModuleElement(module);
-            }
+            },
 
             /** @private */
             // Remove an associated module.element from the DOM
-            ,
+
             removeModuleElement : function(module) {
                 var el;
                 if (module = this.getModule(module)) {
                     if (el = module.element) {
-                        el.dom ? el.removeAllListeners().remove() : Ext
-                                .removeNode(el);
+                        el.dom ? el.removeAllListeners().remove() : Ext.removeNode(el);
                         module.element = null;
                     }
                 }
@@ -1734,7 +1696,7 @@
                                 loaded : true,
                                 pending : false,
                                 contentType : response.getResponseHeader
-                                        ? response.getResponseHeader['Content-Type']
+                                        ? response.getResponseHeader('Content-Type')
                                                 || ''
                                         : '',
                                 content : opt.cacheResponses
@@ -1786,14 +1748,14 @@
                     }
                 }
 
-            }
+            },
 
-            ,
+
             failure : function(response) {
                 var module = response.argument.module.module, opt = response.argument.module;
 
                 module.contentType = response.getResponseHeader
-                        ? response.getResponseHeader['Content-Type'] || ''
+                        ? response.getResponseHeader('Content-Type') || ''
                         : '';
                 this.currentModule = module.name;
                 this.result = module.pending = false;
@@ -1803,9 +1765,9 @@
                             httpStatus : response.status,
                             httpStatusText : response.statusText
                         }]);
-            }
+            },
 
-            ,
+
             nextModule : function() {
                 var module, transport, executable, options, url;
 
@@ -1911,13 +1873,13 @@
                     moduleObj.notify.push(this);
                 }
 
-            }
+            },
             // Private
             /*
              * Normalize requested modules and options into a sequential series
              * of load requests and inline callbacks
              */
-            ,
+
             prepare : function(modules) {
 
                 var onAvailableList = new Array(), workList = new Array(), options = this.defOptions, mtype, MM = this.MM;
@@ -2022,9 +1984,9 @@
                 this.onAvailableList = onAvailableList.flatten().unique();
                 // console.info('prepared', this.workList.clone(),
                 // this.onAvailableList.clone(), options);
-            }
+            },
 
-            ,
+
             onComplete : function(loaded) { // called with scope of last module
                                             // in chain
                 var cb;
@@ -2071,167 +2033,167 @@
 
     Ext.applyIf(Array.prototype, {
 
-                /*
-                 * Fix for Opera, which does not seem to include the map
-                 * function on Array's
-                 */
-                map : function(fun, scope) {
-                    var len = this.length;
-                    if (typeof fun != "function") {
-                        throw new TypeError();
-                    }
-                    var res = new Array(len);
+        /*
+         * Fix for Opera, which does not seem to include the map
+         * function on Array's
+         */
+        map : function(fun, scope) {
+            var len = this.length;
+            if (typeof fun != "function") {
+                throw new TypeError();
+            }
+            var res = new Array(len);
 
-                    for (var i = 0; i < len; i++) {
-                        if (i in this) {
-                            res[i] = fun.call(scope || this, this[i], i, this);
-                        }
-                    }
-                    return res;
-                },
+            for (var i = 0; i < len; i++) {
+                if (i in this) {
+                    res[i] = fun.call(scope || this, this[i], i, this);
+                }
+            }
+            return res;
+        },
 
-                include : function(value, deep) { // Boolean: is value present
-                                                    // in Array
-                    // use native indexOf if available
-                    if (!deep && typeof this.indexOf == 'function') {
-                        return this.indexOf(value) != -1;
-                    }
-                    var found = false;
-                    try {
-                        this.forEach(function(item, index) {
-                                    if (found = (deep
-                                            ? (item.include
-                                                    ? item.include(value, deep)
-                                                    : (item === value))
-                                            : item === value)) {
-                                        throw Ext.stopIteration;
-                                    }
-                                });
-                    } catch (exc) {
-                        if (exc != Ext.stopIteration) {
-                            throw exc;
-                        }
-                    }
-                    return found;
-                },
-                // Using iterFn, traverse the array, push the current element
-                // value onto the
-                // result if the iterFn returns true
-                filter : function(iterFn, scope) {
-                    var a = new Array();
-                    iterFn || (iterFn = function(value) {
-                        return value;
-                    });
-                    this.forEach(function(value, index) {
-                                if (iterFn.call(scope, value, index)) {
-                                    a.push(value);
-                                }
-                            });
-                    return a;
-                },
-
-                compact : function(deep) { // Remove null, undefined array
-                                            // elements
-                    var a = new Array();
-                    this.forEach(function(v) {
-                                (v === null || v === undefined)
-                                        || a.push(deep && Ext.isArray(v) ? v
-                                                .compact() : v);
-                            }, this);
-                    return a;
-                },
-
-                flatten : function() { // flatten: [1,2,3,[4,5,6]] ->
-                                        // [1,2,3,4,5,6]
-                    var a = new Array();
-                    this.forEach(function(v) {
-                                Ext.isArray(v) ? (a = a.concat(v)) : a.push(v);
-                            }, this);
-                    return a;
-                },
-
-                unique : function(sorted /* sort optimization */, exact) { // unique:
-                                                                            // [1,3,3,4,4,5]
-                                                                            // ->
-                                                                            // [1,3,4,5]
-                    var a = new Array();
-                    this.forEach(function(value, index) {
-                                if (0 == index
-                                        || (sorted ? a.last() != value : !a
-                                                .include(value, exact))) {
-                                    a.push(value);
-                                }
-                            }, this);
-                    return a;
-                },
-                // search array values based on regExpression pattern returning
-                // test (and optionally execute function(value,index) on test
-                // before returned)
-                grep : function(pattern, iterFn, scope) {
-                    var a = new Array();
-                    iterFn || (iterFn = function(value) {
-                        return value;
-                    });
-                    var fn = scope ? iterFn.createDelegate(scope) : iterFn;
-
-                    if (typeof pattern == 'string') {
-                        pattern = new RegExp(pattern);
-                    }
-                    this.forEach(function(value, index) {
-                                if (pattern.test(value)) {
-                                    a.push(fn(value, index));
-                                }
-                            });
-                    return a;
-                },
-                first : function() {
-                    return this[0];
-                },
-
-                last : function() {
-                    return this[this.length - 1];
-                },
-
-                clear : function() {
-                    this.length = 0;
-                },
-
-                // return an array element selected at random
-                atRandom : function(defValue) {
-                    var r = Math.floor(Math.random() * this.length);
-                    return this[r] || defValue;
-                },
-
-                clone : function(deep) {
-                    if (!deep) {
-                        return this.concat();
-                    }
-
-                    var length = this.length || 0, t = new Array(length);
-                    while (length--) {
-                        t[length] = clone(this[length], true);
-                    }
-                    return t;
-
-                },
-                 /*
-                 * Array forEach Iteration based on previous work by: Dean Edwards
-                 * (http://dean.edwards.name/weblog/2006/07/enum/) Gecko already
-                 * supports forEach for Arrays : see
-                 * http://developer.mozilla.org/en/docs/Core_JavaScript_1.5_Reference:Objects:Array:forEach
-                 */
-                forEach : function( block, scope) {
-
-                    if (typeof block != "function") {
-                        throw new TypeError();
-                    }
-                    var i = 0, length = this.length;
-                    while (i < length) {
-                        block.call(scope, this[i], i++, this);
-                    }
-                  }
-
+        include : function(value, deep) { // Boolean: is value present
+                                            // in Array
+            // use native indexOf if available
+            if (!deep && typeof this.indexOf == 'function') {
+                return this.indexOf(value) != -1;
+            }
+            var found = false;
+            try {
+                this.forEach(function(item, index) {
+                            if (found = (deep
+                                    ? (item.include
+                                            ? item.include(value, deep)
+                                            : (item === value))
+                                    : item === value)) {
+                                throw Ext.stopIteration;
+                            }
+                        });
+            } catch (exc) {
+                if (exc != Ext.stopIteration) {
+                    throw exc;
+                }
+            }
+            return found;
+        },
+        // Using iterFn, traverse the array, push the current element
+        // value onto the
+        // result if the iterFn returns true
+        filter : function(iterFn, scope) {
+            var a = new Array();
+            iterFn || (iterFn = function(value) {
+                return value;
             });
+            this.forEach(function(value, index) {
+                        if (iterFn.call(scope, value, index)) {
+                            a.push(value);
+                        }
+                    });
+            return a;
+        },
+
+        compact : function(deep) { // Remove null, undefined array
+                                    // elements
+            var a = new Array();
+            this.forEach(function(v) {
+                        (v === null || v === undefined)
+                                || a.push(deep && Ext.isArray(v) ? v
+                                        .compact() : v);
+                    }, this);
+            return a;
+        },
+
+        flatten : function() { // flatten: [1,2,3,[4,5,6]] ->
+                                // [1,2,3,4,5,6]
+            var a = new Array();
+            this.forEach(function(v) {
+                        Ext.isArray(v) ? (a = a.concat(v)) : a.push(v);
+                    }, this);
+            return a;
+        },
+
+        unique : function(sorted /* sort optimization */, exact) { // unique:
+                                                                    // [1,3,3,4,4,5]
+                                                                    // ->
+                                                                    // [1,3,4,5]
+            var a = new Array();
+            this.forEach(function(value, index) {
+                        if (0 == index
+                                || (sorted ? a.last() != value : !a
+                                        .include(value, exact))) {
+                            a.push(value);
+                        }
+                    }, this);
+            return a;
+        },
+        // search array values based on regExpression pattern returning
+        // test (and optionally execute function(value,index) on test
+        // before returned)
+        grep : function(pattern, iterFn, scope) {
+            var a = new Array();
+            iterFn || (iterFn = function(value) {
+                return value;
+            });
+            var fn = scope ? iterFn.createDelegate(scope) : iterFn;
+
+            if (typeof pattern == 'string') {
+                pattern = new RegExp(pattern);
+            }
+            this.forEach(function(value, index) {
+                        if (pattern.test(value)) {
+                            a.push(fn(value, index));
+                        }
+                    });
+            return a;
+        },
+        first : function() {
+            return this[0];
+        },
+
+        last : function() {
+            return this[this.length - 1];
+        },
+
+        clear : function() {
+            this.length = 0;
+        },
+
+        // return an array element selected at random
+        atRandom : function(defValue) {
+            var r = Math.floor(Math.random() * this.length);
+            return this[r] || defValue;
+        },
+
+        clone : function(deep) {
+            if (!deep) {
+                return this.concat();
+            }
+
+            var length = this.length || 0, t = new Array(length);
+            while (length--) {
+                t[length] = clone(this[length], true);
+            }
+            return t;
+
+        },
+         /*
+         * Array forEach Iteration based on previous work by: Dean Edwards
+         * (http://dean.edwards.name/weblog/2006/07/enum/) Gecko already
+         * supports forEach for Arrays : see
+         * http://developer.mozilla.org/en/docs/Core_JavaScript_1.5_Reference:Objects:Array:forEach
+         */
+        forEach : function( block, scope) {
+
+            if (typeof block != "function") {
+                throw new TypeError();
+            }
+            var i = 0, length = this.length;
+            while (i < length) {
+                block.call(scope, this[i], i++, this);
+            }
+          }
+
+    });
 
 
     // globally resolve forEach enumeration
