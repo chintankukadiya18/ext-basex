@@ -1,23 +1,34 @@
 /* global Ext */
 /*
- * ext-basex 3.2
+ * ext-basex 3.3
  * ***********************************************************************************
  *
- * Ext.lib.Ajax enhancements: - adds EventManager Support to Ext.lib.Ajax (if
- * Ext.util.Observable is present in the stack) - adds Synchronous Ajax Support (
- * options.async =false ) - Permits IE7 to Access Local File Systems using IE's
- * older ActiveX interface via the forceActiveX property - Pluggable Form
- * encoder (encodeURIComponent is still the default encoder) - Corrects the
- * Content-Type Headers for posting JSON (application/json) and XML (text/xml)
- * data payloads and sets only one value (per RFC) - Adds fullStatus:{ isLocal,
- * proxied, isOK, isError, isTimeout, isAbort, error, status, statusText} object
- * to the existing Response Object. - Adds standard HTTP Auth support to every
- * request (XHR userId, password config options) - options.method prevails over
- * any method derived by the lib.Ajax stack (DELETE, PUT, HEAD etc). - Adds
- * named-Priority-Queuing for Ajax Requests - adds Script=Tag support for
- * foreign-domains (proxied:true) with configurable callbacks. - Adds final
- * features for $JIT support.
- *
+ * Ext.lib.Ajax enhancements: 
+ * - adds EventManager Support to Ext.lib.Ajax (if Ext.util.Observable is present in the stack) 
+ * - adds Synchronous Ajax Support ( options.async =false ) 
+ * - Permits IE to Access Local File Systems using IE's older ActiveX interface via the forceActiveX property 
+ * - Pluggable Form encoder (encodeURIComponent is still the default encoder) 
+ * - Corrects the Content-Type Headers for posting JSON (application/json) and XML (text/xml)
+ *   data payloads and sets only one value (per RFC) 
+ * - Adds fullStatus:{ isLocal, proxied, isOK, isError, isTimeout, isAbort, error, status, statusText} object
+ *   to the existing Response Object. 
+ * - Adds standard HTTP Auth support to every request (XHR userId, password config options) 
+ * - options.method prevails over any method derived by the lib.Ajax stack (DELETE, PUT, HEAD etc). 
+ * - Adds named-Priority-Queuing for Ajax Requests 
+ * - adds Script=Tag support for foreign-domains (proxied:true) with configurable callbacks. 
+ * - Adds final features for $JIT support.
+ * 
+ * - Adds Browser capabilities object reporting on presence of (SVG, Canvas, Flash, Cookies, XPath )
+ *    if(Ext.capabilities.hasFlash){ ... }
+ * - Adds Ext.overload supported for parameter-based overloading of Function and class methods.
+ * - Adds Ext.clone functions for any datatype.
+ * - Adds Array prototype features: first, last, clone, forEach, atRandom, include, flatten, compact, unique, filter, map
+ * - Connection/response object members : getAllResponseHeaders, getResponseHeader are now functions.
+ * - Adds Array.slice support for other browsers (Gecko already supports it)
+ *    @example:  Array.slice( someArray, 2 )
+ * - Adds Ext[isFunction, isObject, isDocument, isElement, isEvent]  methods.
+ * - Adds Ext.isEventSupported('resize'[, forElement]) to determine if the browser supports a specific event.
+ *    
  * ***********************************************************************************
  * Author: Doug Hendricks. doug[always-At]theactivegroup.com Copyright
  * 2007-2009, Active Group, Inc. All rights reserved.
@@ -262,19 +273,20 @@
 
             }
 
-
             if(A.pendingRequests || quit){
                 this.dispatch.defer(this.quantas, this);
             } else{
                 this.stop();
             }
-
-
         }
     });
 
     Ext.apply(A, {
-
+        
+        headers  :  A.headers || {},
+        
+        defaultPostHeader : A.defaultPostHeader || 'application/x-www-form-urlencoded; charset=UTF-8',
+        
         queueManager : new A.QueueManager(),
 
         // If true (or queue config object) ALL requests are queued
@@ -286,8 +298,7 @@
         // the Current number of pending Queued requests.
         pendingRequests : 0,
 
-        // Specify the maximum allowed during concurrent Queued browser (XHR)
-        // requests
+        // Specify the maximum allowed during concurrent Queued browser (XHR) requests
         maxConcurrentRequests : Ext.isIE ? Ext.value(window.maxConnectionsPerServer, 2) : 4,
 
         /* set True as needed, to coerce IE to use older ActiveX interface */
@@ -392,7 +403,10 @@
             return statObj;
 
         },
-        handleTransactionResponse : function(o, callback, isAbort) {
+        /**
+         * @private
+         */
+        handleTransactionResponse : function(o, callback, isAbort, isTimeout) {
 
             callback = callback || {};
             var responseObject = null;
@@ -415,7 +429,7 @@
                  */
                 responseObject = Ext.apply({}, responseObject || {},
                         this.createExceptionObject(o.tId, callback.argument,
-                          (isAbort? isAbort: false)));
+                          (isAbort? isAbort: false), isTimeout));
 
             }
 
@@ -430,7 +444,7 @@
                 if (o.status.isOK && !o.status.isError) {
                     if (!this.events
                             || this.fireEvent('response', o, responseObject,
-                                    callback, isAbort) !== false) {
+                                    callback, isAbort, isTimeout) !== false) {
                         if (callback.success) {
                             callback.success.call(callback.scope || null,responseObject);
                         }
@@ -438,7 +452,7 @@
                 } else {
                     if (!this.events
                             || this.fireEvent('exception', o, responseObject,
-                                    callback, isAbort) !== false) {
+                                    callback, isAbort, isTimeout) !== false) {
                         if (callback.failure) {
                             callback.failure.call(callback.scope || null, responseObject);
                         }
@@ -466,7 +480,7 @@
          */
         reCtypeJSON : /(application|text)\/json/i,
 
-        createResponseObject : function(o, callbackArg, isAbort) {
+        createResponseObject : function(o, callbackArg, isAbort, isTimeout) {
             var obj = {
                 responseXML : null,
                 responseText : '',
@@ -653,8 +667,7 @@
                     }
                 }
                 var cType;
-                if (cType = (this.headers ? this.headers['Content-Type']
-                        || null : null)) {
+                if (cType = (this.headers ? this.headers['Content-Type'] || null : null)) {
                     // remove to ensure only ONE is passed later.(per RFC)
                     delete this.headers['Content-Type'];
                 }
@@ -665,12 +678,11 @@
                 } else if (options.jsonData) {
                     cType || (cType = 'application/json; charset=utf-8');
                     method = 'POST';
-                    data = typeof options.jsonData == 'object' ? Ext
-                            .encode(options.jsonData) : options.jsonData;
+                    data = typeof options.jsonData == 'object' ? 
+                        Ext.encode(options.jsonData) : options.jsonData;
                 }
                 if (data) {
-                    cType
-                            || (cType = this.useDefaultHeader
+                    cType || (cType = this.useDefaultHeader
                                     ? this.defaultPostHeader
                                     : null);
                     if (cType) {
@@ -702,8 +714,8 @@
                         conn : {
                             el : null,
                             send : function() {
-                                var doc = (f.target || window).document, head = doc
-                                        .getElementsByTagName("head")[0];
+                                var doc = (f.target || window).document, 
+                                head = doc.getElementsByTagName("head")[0];
                                 if (head && this.el) {
                                     head.appendChild(this.el);
                                 }
@@ -854,9 +866,7 @@
                 } catch (exr) {
                     o.status.isError = true;
                     o.status.error = exr;
-
-                    return Ext.apply(o, this.handleTransactionResponse(o,
-                                    callback));
+                    return Ext.apply(o, this.handleTransactionResponse(o, callback));
                 }
 
                 return options.async ? o : Ext.apply(o, this.handleTransactionResponse(o, callback));
@@ -881,11 +891,10 @@
 
                 o.status.isAbort = !(o.status.isTimeout = isTimeout || false);
                 if (this.events) {
-                    this.fireEvent(isTimeout ? 'timeout' : 'abort', o,
-                                    callback);
+                    this.fireEvent(isTimeout ? 'timeout' : 'abort', o, callback);
                 }
 
-                this.handleTransactionResponse(o, callback, true);
+                this.handleTransactionResponse(o, callback, true, isTimeout);
 
                 return true;
             } else {
@@ -927,8 +936,8 @@
         attributes = Ext.apply({}, attributes || {});
         context || (context = window);
 
-        var node = null, doc = context.document, head = doc
-                .getElementsByTagName("head")[0];
+        var node = null, doc = context.document, 
+            head = doc.getElementsByTagName("head")[0];
 
         if (doc && head && (node = doc.createElement(tag))) {
             for (var attrib in attributes) {
@@ -994,7 +1003,7 @@
              */
 
             onStatus : function(status, fn, scope, options) {
-                var args = Array.prototype.slice.call(arguments, 1);
+                var args = Array.slice(arguments, 1);
                 status = new Array().concat(status || new Array());
                 Ext.each(status, function(statusCode) {
                             statusCode = parseInt(statusCode, 10);
@@ -1012,7 +1021,7 @@
              */
 
             unStatus : function(status, fn, scope, options) {
-                var args = Array.prototype.slice.call(arguments, 1);
+                var args = Array.slice(arguments, 1);
                 status = new Array().concat(status || new Array());
                 Ext.each(status, function(statusCode) {
                             statusCode = parseInt(statusCode, 10);
@@ -1023,9 +1032,7 @@
                         }, this);
             },
             onReadyState : function() {
-                this.fireEvent.apply(this, ['readystatechange']
-                                .concat(Array.prototype.slice.call(
-                                        arguments, 0)));
+                this.fireEvent.apply(this, ['readystatechange'].concat(Array.slice(arguments, 0)));
             }
 
         }, new Ext.util.Observable());
@@ -1486,8 +1493,7 @@
 
                 try {
                     var task = new Task(this, Ext.isArray(modList)
-                                    ? modList
-                                    : Array.prototype.slice.call(arguments, 0));
+                                    ? modList : Array.slice(arguments, 0));
                     task.start();
 
                 } catch (ex) {
@@ -1659,8 +1665,7 @@
                 if (currModule) {
                     var res = this.MM.fireEvent.apply(this.MM, [
                                     (success ? 'load' : 'loadexception'),
-                                    this.MM, currModule].concat(args
-                                    || new Array()));
+                                    this.MM, currModule].concat(args || new Array()));
                     if (!success) {
                         this.active = res;
                     }
@@ -2224,24 +2229,23 @@
         }
     };
 
+    /**
+     * @private
+     * Primary clone Function
+     */
     var clone = function(obj, deep) {
 
-        if (obj && typeof obj.clone == 'function') {
+        if (Ext.isFunction(obj.clone)) {
             return obj.clone(deep);
         }
 
-        if (!obj) {
-            return obj;
-        }
+        if (!obj) {return obj;}
 
         var o = {};
         forEach(obj, function(val, name, objAll) {
-
-                    o[name] = (val === objAll ? // reference to itself?
-                            o
-                            : deep ? clone(val, true) : val);
-                })
-
+            o[name] = (val === objAll ? // reference to itself?
+                    o : deep ? clone(val, true) : val);
+         });
         return o;
     };
 
@@ -2252,7 +2256,7 @@
             return slice.apply(object, slice.call(arguments, 1));
         };
     }
-
+    //Add clone function to prototypes
     forEach([Number, RegExp, Boolean], function(t) {
                 t.prototype.clone = function(deep) {
                     return deep ? new t(this) : this;
@@ -2315,5 +2319,145 @@
             });
 
     Ext.clone = clone;
+    var overload = function(pfn, fn ){
+
+           var f = typeof pfn =='function' ? pfn : function(){};
+
+           var ov = f._ovl; //call signature hash
+           if(!ov){
+               ov = { base: f};
+               ov[f.length|| 0] = f;
+
+               f= function(){  //the proxy stub
+                  var o = arguments.callee._ovl;
+                  var fn = o[arguments.length] || o.base;
+                  //recursion safety
+                  return fn && fn != arguments.callee ? fn.apply(this,arguments): undefined;
+               };
+           }
+           var fnA = [].concat(fn);
+           for(var i=0,l=fnA.length; i<l; i++){
+             //ensures no duplicate call signatures, but last in rules!
+             ov[fnA[i].length] = fnA[i];
+           }
+           f._ovl= ov;
+           return f;
+
+       };
+
+       
+    Ext.applyIf(Ext,{
+        overload : overload( overload,
+           [
+             function(fn){ return overload(null, fn);},
+             function(obj, mname, fn){
+                 return obj[mname] = overload(obj[mname],fn);}
+          ]),
+          
+        isArray : function(v){
+           return Object.prototype.toString.apply(v) === '[object Array]';
+        },
+        
+        isObject:function(obj){
+            return (obj !== null) && typeof obj === 'object';
+        },
+        
+        isDocument : function(obj){
+            return Object.prototype.toString.apply(obj) === '[object HTMLDocument]' || (obj && obj.nodeType === 9);
+        },
+        
+        isElement : function(obj){
+            return obj && Ext.type(obj)=== 'element';
+        },
+        
+        isEvent : function(obj){
+            return Object.prototype.toString.apply(obj) === '[object Event]' || (Ext.isObject(obj) && !Ext.type(o.constructor) && (window.event && o.clientX && o.clientX === window.event.clientX));
+        },
+
+        isFunction: function(obj){
+            return typeof obj === 'function';
+        },
+        
+        isString : function(obj){
+            return Ext.type(obj)==='string';    
+        },
+        
+        isEventSupported : (function(){
+	        var TAGNAMES = {
+	          'select':'input','change':'input',
+	          'submit':'form','reset':'form',
+	          'error':'img','load':'img','abort':'img'
+	        };
+	        //Cached results
+	        var cache = {};
+	        //Get a tokenized string unique to the node and event type
+	        var getKey = function(type, el){
+	            return (el ? 
+                           (Ext.isElement(el) || Ext.isDocument(el) ? 
+                                el.nodeName.toLowerCase() : 
+                                    el.id || Ext.type(el)) 
+                       : 'div') + ':' + type;
+	        };
+	
+	        return function (evName, testEl) {
+               
+	          var key = getKey(evName, testEl);
+              if(key in cache){
+                //Use a previously cached result if available
+                return cache[key];
+              }
+	          var el, isSupported = window.Event ? String(evName).toUpperCase() in window.Event: false;
+	         
+	          if(!isSupported){
+	            var eventName = 'on' + evName;
+	            el = testEl || document.createElement(TAGNAMES[eventName] || 'div');
+	            isSupported = (eventName in el);
+	          }
+	          if (!isSupported && el) {
+	            el.setAttribute && el.setAttribute(eventName, 'return;');
+	            isSupported = typeof el[eventName] == 'function';
+	          }
+	          //save the cached result for future tests
+	          cache[getKey(evName, el)] = isSupported;
+	          el = null;
+	          return isSupported;
+	        };
+	        
+	    })(),
+        
+        capabilities : {
+            hasFlash : (function(){
+                //Check for ActiveX first because some versions of IE support navigator.plugins, just not the same as other browsers
+		        if(window.ActiveXObject){
+		            try{
+		                //try to create a flash instance
+		                new ActiveXObject("ShockwaveFlash.ShockwaveFlash");
+		                return true;
+		            }catch(e){};
+		            //If the try-catch fails, return false
+		            return false;
+		        }else if(navigator.plugins){
+		            //Loop through all the plugins
+		            for(var i=0, length = navigator.plugins.length; i < length; i++){
+		                //test to see if any plugin names contain the word flash, if so it must support it - return true
+		                if((/flash/gi).test(navigator.plugins[i].name)){
+		                    return true;
+		                }
+		            }
+		            //return false if no plugins match
+		            return false;
+		        }
+		        //Return false if ActiveX and nagivator.plugins are not supported
+		        return false;
+                })(),
+            hasCookies : !!navigator.cookieEnabled && navigator.cookieEnabled,
+            hasCanvas  : !!document.createElement("canvas").getContext,
+            hasSVG     : !!(document.createElementNS && document.createElementNS('http://www.w3.org/2000/svg', 'svg').width),
+            hasXpath   : !!document.evaluate,
+            hasBasex   : true
+        }
+        
+        
+    });
 
 })();
