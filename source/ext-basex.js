@@ -74,14 +74,15 @@
         this.requests = new Array();
         this.pending = false;
         // assert/resolve to 0-9
-        this.priority = this.priority > 9 ? 9 : (this.priority < 0
-                ? 0
-                : this.priority);
-
+        this.priority = this.priority > 9 ? 9 : (this.priority < 0 ? 0 : this.priority);
     };
 
     Ext.extend(A.Queue, Object, {
-
+       /**
+        * Adds Ext.lib.Ajax.request arguments to queue
+        * @param {Array} request An array of request method arguments.
+        *
+        */
         add : function(req) {
 
             var permit = A.events ? A.fireEvent('beforequeue', this, req) : true;
@@ -89,13 +90,24 @@
                 this.requests.push(req);
                 this.pending = true;
                 A.pendingRequests++;
-                if (this.manager) {
-                    this.manager.start();
-                }
+                this.manager && this.manager.start();
             }
         },
+        
+       /**
+        * @property {Boolean} suspended Indicate the suspense state of the queue.
+        */
         suspended : false,
+        /**
+         * @property {Object} activeRequest A reference to current/last active request.
+         */
         activeRequest : null,
+        
+       /**
+        * Selects the next item on the queue stack
+        * @param {Boolean} peek If true, the queue item is returned but not removed from the stack.
+        * @ default false
+        */
         next : function(peek) {
             var req = peek ?
                 this.requests[this.FIFO ? 'first' : 'last']()
@@ -104,10 +116,8 @@
             if (this.requests.length == 0) {
                 // queue emptied callback
                 this.pending = false;
-                if (this.callback) {
-                    this.callback.call(this.scope || null, this);
-                }
-                if (A.events) { A.fireEvent('queueempty', this); }
+                Ext.isFunction(this.callback) && this.callback.call(this.scope || null, this);
+                A.events && A.fireEvent('queueempty', this);
             }
             return req || null;
         },
@@ -124,16 +134,24 @@
             this.next(); //force the empty callback/event
 
         },
-        // suspend/resume from dispatch control
-
+        
+        /**
+        * Suspend queue further queue dispatches of any remaining (pending) requests until the {@link #Ext.ux.ModuleManager-resume} method is called.
+        */
         suspend : function() {
             this.suspended = true;
         },
-
+        
+        /** Resume from a suspended state */
         resume : function() {
             this.suspended = false;
         },
-
+        
+        /**
+        * Dispatches the next queue item and initiates a Ext.lib.Ajax request on the result.
+        * @param {Boolean} peek If true, the queue item is returned but not removed from the stack.
+        * @return activeRequest
+        */
         requestNext : function(peek) {
             var req;
             this.activeRequest = null;
@@ -168,10 +186,19 @@
 
     Ext.extend(A.QueueManager, Object, {
 
+        
+       /**
+        * @cfg {Integer} quantas Adjustable milliseconds deferred dispatch timer interval
+        */
+        quantas : 10,
+        
+       /** Return a named queue reference
+        * param {String} name The name of the desired queue.
+        * @return Ext.lib.Ajax.Queue
+        */
         getQueue : function(name) {
             return this.queues[name];
         },
-
 
         createQueue : function(config) {
             if (!config) {
@@ -183,14 +210,12 @@
             this.queues[q.name] = q;
 
             var pqa = this.priorityQueues[q.priority];
-            if (pqa && pqa.indexOf(q.name) == -1) {
-                pqa.push(q.name);
-            }
-
+            pqa && pqa.indexOf(q.name) == -1 && pqa.push(q.name);
             return q;
         },
-        // Remove a Queue by passed name or Queue Object reference
-
+       /** Remove a Queue by passed name or Queue Object reference
+        * @param {String/Ext.lib.Ajax.Queue} queue
+        */
         removeQueue : function(q) {
             if (q && (q = this.getQueue(q.name || q))) {
                 q.clear(); // purge any pending requests
@@ -198,7 +223,8 @@
                 delete this.queues[q.name];
             }
         },
-
+        
+        /** @private */
         start : function() {
             if (!this.started) {
                 this.started = true;
@@ -207,25 +233,25 @@
             return this;
         },
 
-
+        /** Suspends all defined queues */
         suspendAll : function() {
             forEach(this.queues, function(Q) { Q.suspend(); });
         },
-
+        
+        /** Resumes all suspended queues */
         resumeAll : function() {
             forEach(this.queues, function(Q) { Q.resume();  });
             this.start();
         },
 
         /**
-         * Default Dispatch mode: progressive false to exhaust a priority queue
-         * until empty during dispatch (sequential) true to dispatch a single
-         * request from each priority queue until all queues exhausted. This
+         * @cfg (Boolean) progressive Default Dispatch mode for all defined queues<p>
+         * a false value will exhaust a priority queue until empty during dispatch (sequential) <p>
+         * true to dispatch a single request from each priority queue until all queues exhausted.<p>This
          * option may be set on the Queue itself as well.
+         * @default false
          */
-
         progressive : false,
-
 
         stop : function() {
             this.started = false;
@@ -261,14 +287,9 @@
 
                 Ext.each(this.priorityQueues, function(pqueue) {
                     // pqueue == array of queue names
-
-                    if(!!pqueue.length){
-                        Ext.each(pqueue , disp, this);
-                    }
+                    !!pqueue.length && Ext.each(pqueue , disp, this);
                     quit || (quit = A.activeRequests > A.maxConcurrentRequests);
-
                     if(quit)return false;
-
                 }, this);
 
             }
@@ -283,11 +304,15 @@
 
     Ext.apply(A, {
         
-        headers  :  A.headers || {},
-        
+        headers           : A.headers || {},
         defaultPostHeader : A.defaultPostHeader || 'application/x-www-form-urlencoded; charset=UTF-8',
+        defaultHeaders    : A.defaultHeaders || {},
+        useDefaultXhrHeader  : !!A.useDefaultXhrHeader, 
+        defaultXhrHeader  : 'Ext.basex',
         
-        queueManager : new A.QueueManager(),
+        pollInterval      : A.pollInterval || 50,
+        
+        queueManager      : new A.QueueManager(),
 
         // If true (or queue config object) ALL requests are queued
         queueAll : false,
@@ -298,15 +323,22 @@
         // the Current number of pending Queued requests.
         pendingRequests : 0,
 
-        // Specify the maximum allowed during concurrent Queued browser (XHR) requests
+        /**
+         * @property maxConcurrentRequests 
+         * Specify the maximum allowed during concurrent Queued browser (XHR) requests
+         */
         maxConcurrentRequests : Ext.isIE ? Ext.value(window.maxConnectionsPerServer, 2) : 4,
 
-        /* set True as needed, to coerce IE to use older ActiveX interface */
+        /** set True as needed, to coerce IE to use older ActiveX interface 
+         */
         forceActiveX : false,
 
-        /* Global default may be toggled at any time */
+        /**
+         *  Global default may be toggled at any time 
+         */
         async : true,
-
+        
+        /** private */
         createXhrObject : function(transactionId) {
             var obj = {
                 status : {
@@ -371,6 +403,8 @@
             return data.substr(0, data.length - 1);
 
         },
+        
+        /** private */
         getHttpStatus : function(reqObj) {
 
             var statObj = {
@@ -385,9 +419,7 @@
             };
 
             try {
-                if (!reqObj) {
-                    throw ('noobj');
-                }
+                if (!reqObj) { throw ('noobj'); }
                 statObj.status = reqObj.status;
                 statObj.readyState = reqObj.readyState;
                 statObj.isLocal = (!reqObj.status && location.protocol == "file:")
@@ -421,17 +453,15 @@
                 responseObject = this.createResponseObject(o, callback.argument, isAbort);
             }
 
-            if (o.status.isError) {
-                /*
-                 * checked again in case exception was raised - ActiveX was
-                 * disabled during XML-DOM creation? And mixin everything the
-                 * XHR object had to offer as well
-                 */
-                responseObject = Ext.apply({}, responseObject || {},
-                        this.createExceptionObject(o.tId, callback.argument,
-                          (isAbort? isAbort: false), isTimeout));
 
-            }
+            /*
+             * checked again in case exception was raised - ActiveX was
+             * disabled during XML-DOM creation? And mixin everything the
+             * XHR object had to offer as well
+             */
+             o.status.isError && (responseObject = Ext.apply({}, responseObject || {},
+                        this.createExceptionObject(o.tId, callback.argument,
+                          (isAbort? isAbort: false), isTimeout)));
 
             responseObject.options = o.options;
             responseObject.fullStatus = o.status;
@@ -460,26 +490,26 @@
                 }
             }
 
-            if (o.options.async) {
-                this.releaseObject(o);
-                responseObject = null;
-            } else {
-                this.releaseObject(o);
-                return responseObject;
-            }
+            this.releaseObject(o);
+            if (o.options.async) {responseObject = null;} 
+            else { return responseObject; }
 
         },
 
-        /* replace with a custom JSON decoder/validator if required */
+        /**
+         *  replace with a custom JSON decoder/validator if required 
+         */
         decodeJSON : Ext.decode,
 
-        /*
+        /**
+         * @cfg reCtypeJSON
          * regexp test pattern applied to incoming response Content-Type header
          * to identify a potential JSON response. The default pattern handles
          * either text/json or application/json
          */
         reCtypeJSON : /(application|text)\/json/i,
-
+        
+         /** private */
         createResponseObject : function(o, callbackArg, isAbort, isTimeout) {
             var obj = {
                 responseXML : null,
@@ -534,9 +564,7 @@
                                 try { // Opera 9 will fail parsing non-XML
                                         // content, so trap here.
                                     domParser = new DOMParser();
-                                    xdoc = domParser.parseFromString(
-                                            obj.responseText,
-                                            'application\/xml');
+                                    xdoc = domParser.parseFromString(obj.responseText,'application\/xml');
                                 } catch (exP) {
                                 } finally {
                                     domParser = null;
@@ -563,17 +591,15 @@
                 var header = headerStr.split('\n');
                 for (var i = 0; i < header.length; i++) {
                     var delimitPos = header[i].indexOf(':');
-                    if (delimitPos != -1) {
-                        headerObj[header[i].substring(0, delimitPos)] = header[i]
-                                .substring(delimitPos + 2);
-                    }
+                    delimitPos != -1 && 
+                        (headerObj[header[i].substring(0, delimitPos)] = header[i]
+                                .substring(delimitPos + 2));
+                    
                 }
 
-                if (o.options.isJSON
-                        || (this.reCtypeJSON && this.reCtypeJSON
-                                .test(headerObj['Content-Type'] || ""))) {
+                if (o.options.isJSON || (this.reCtypeJSON && this.reCtypeJSON .test(headerObj['Content-Type'] || ""))) {
                     try {
-                        obj.responseJSON = typeof this.decodeJSON == 'function'
+                        obj.responseJSON = Ext.isFunction( this.decodeJSON )
                                 ? this.decodeJSON(obj.responseText)
                                 : null;
                     } catch (exJSON) {
@@ -596,23 +622,25 @@
                         fullStatus : o.status
                     });
 
-            if (typeof callbackArg != 'undefined') {
-                obj.argument = callbackArg;
-            }
-
+            typeof callbackArg != 'undefined' && (obj.argument = callbackArg);
             return obj;
         },
+        
+        
         setDefaultPostHeader : function(contentType) {
-            this.defaultPostHeader = contentType;
+            this.defaultPostHeader = contentType||'';
         },
-
+        
+        /**
+         * Toggle use of the DefaultXhrHeader ('Ext.basex') 
+         */
         setDefaultXhrHeader : function(bool) {
             this.useDefaultXhrHeader = bool || false;
         },
 
         request : function(method, uri, cb, data, options) {
 
-            options = Ext.apply({
+            var O = options = Ext.apply({
                         async : this.async || false,
                         headers : false,
                         userId : null,
@@ -630,23 +658,20 @@
             }*/
 
             if (!this.events
-                    || this.fireEvent('request', method, uri, cb, data,
-                                    options) !== false) {
+                    || this.fireEvent('request', method, uri, cb, data, O) !== false) {
 
                 // Named priority queues
-                if (!options.queued && (options.queue || (options.queue = this.queueAll || null)) ) {
+                if (!O.queued && (O.queue || (O.queue = this.queueAll || null)) ) {
 
-                    if(options.queue === true){ options.queue = {name:'q-default'}; }
-
-                    var oq = options.queue;
-
+                    O.queue === true && (O.queue = {name:'q-default'});
+                    var oq = O.queue;
                     var qname = oq.name || oq , qm = this.queueManager;
 
                     var q = qm.getQueue(qname) || qm.createQueue(oq);
-                    options.queue = q;
-                    options.queued = true;
+                    O.queue = q;
+                    O.queued = true;
 
-                    var req = [method, uri, cb, data, options];
+                    var req = [method, uri, cb, data, O];
                     req.active = true;
                     q.add(req);
 
@@ -654,51 +679,42 @@
                         tId : this.transactionId++,
                         queued : true,
                         request : req,
-                        options : options
+                        options : O
                     };
                 }
-
-                var hs = options.headers;
-                if (hs) {
-                    for (var h in hs) {
-                        if (hs.hasOwnProperty(h)) {
-                            this.initHeader(h, hs[h], false);
-                        }
-                    }
-                }
+                
+                O.headers && forEach(O.headers, function(value, key) { this.initHeader(key, value, false); });
+                
                 var cType;
                 if (cType = (this.headers ? this.headers['Content-Type'] || null : null)) {
                     // remove to ensure only ONE is passed later.(per RFC)
                     delete this.headers['Content-Type'];
                 }
-                if (options.xmlData) {
+                if (O.xmlData) {
                     cType || (cType = 'text/xml');
                     method = 'POST';
-                    data = options.xmlData;
-                } else if (options.jsonData) {
+                    data = O.xmlData;
+                } else if (O.jsonData) {
                     cType || (cType = 'application/json; charset=utf-8');
                     method = 'POST';
-                    data = typeof options.jsonData == 'object' ? 
-                        Ext.encode(options.jsonData) : options.jsonData;
+                    data = Ext.isObject(O.jsonData) ? Ext.encode(O.jsonData) : O.jsonData;
                 }
                 if (data) {
                     cType || (cType = this.useDefaultHeader
                                     ? this.defaultPostHeader
                                     : null);
-                    if (cType) {
-                        this.initHeader('Content-Type', cType, false);
-                    }
+                    cType && this.initHeader('Content-Type', cType, false);
                 }
 
                 // options.method prevails over any derived method.
-                return this.makeRequest(options.method || method, uri, cb,
-                        data, options);
+                return this.makeRequest(O.method || method, uri, cb, data, O);
             }
             return null;
 
         },
+        
+        
         /** private */
-
         getConnectionObject : function(uri, options) {
             var o, f, e = Ext.emptyFn;
             var tId = this.transactionId;
@@ -749,11 +765,8 @@
 
                         this.readyState = 4;
                         this.status = !!content ? 200 : 404;
-
-                        if (typeof this.onreadystatechange == 'function') {
-                            this.onreadystatechange();
-                        }
-
+                        Ext.isFuntion(this.onreadystatechange) && this.onreadystatechange();
+                        
                         // cleanup must be deferred on IE until after the
                         // callback completes
                         (function() {
@@ -765,11 +778,8 @@
                             }
 
                             if (!request.debug) {
-                                var p = this.el.parentElement
-                                        || this.el.parentNode;
-                                if (p) {
-                                    p.removeChild(this.el);
-                                }
+                                var p = this.el.parentElement || this.el.parentNode;
+                                p && p.removeChild(this.el);
                                 p = null;
                             }
 
@@ -799,10 +809,7 @@
                     };
 
                     o.conn.readyState = 1; // show CallInProgress
-                    if (typeof o.conn.onreadystatechange == 'function') {
-                        o.conn.onreadystatechange();
-                    }
-
+                    Ext.isFunction(o.conn.onreadystatechange) && o.conn.onreadystatechange();
                     options.async = true; // force timeout support
 
                 } else {
@@ -847,11 +854,9 @@
                                 this.defaultXhrHeader, true);
                     }
                 }
-
-                if (this.hasDefaultHeaders || this.hasHeaders) {
-                    this.setHeader(o);
-                }
-
+               
+                this.setHeaders(o);
+                
                 if (o.options.async) { // Timers for syncro calls won't work
                                         // here, as it's a blocking call
                     this.handleReadyState(o, callback);
@@ -926,7 +931,71 @@
             } catch (e) { // There was an error
 
             }
-        }
+        },
+        
+        // private 
+        initHeader : function(label, value) {         
+            (this.headers = this.headers || {})[label] = value;                       
+        },
+        
+        handleReadyState:function(o, callback){
+            var oConn = this;
+
+            if (callback && callback.timeout) {
+                this.timeout[o.tId] = window.setTimeout(function() {
+                    oConn.abort(o, callback, true);
+                }, callback.timeout);
+            }
+
+            this.poll[o.tId] = window.setInterval(
+                    function() {
+                        if (o.conn && o.conn.readyState == 4) {
+                            window.clearInterval(oConn.poll[o.tId]);
+                            delete oConn.poll[o.tId];
+
+                            if (callback && callback.timeout) {
+                                window.clearTimeout(oConn.timeout[o.tId]);
+                                delete oConn.timeout[o.tId];
+                            }
+
+                            oConn.handleTransactionResponse(o, callback);
+                        }
+                    }
+               , this.pollInterval);
+        },
+        
+        setHeaders:function(o){
+            
+            this.defaultHeaders && 
+            forEach(this.defaultHeaders, function(value, key){
+                o.conn.setRequestHeader(key, value);
+            });
+
+            this.headers && 
+            forEach(this.headers, function(value, key){
+                o.conn.setRequestHeader(key, value);
+            });
+                      
+            this.headers = {};
+            this.hasHeaders = false;
+           
+        },
+
+        resetDefaultHeaders:function() {
+            delete this.defaultHeaders;
+            this.defaultHeaders = {};
+            this.hasDefaultHeaders = false;
+        },
+
+        releaseObject:function(o){
+            o && (o.conn = null);
+            o = null;
+        },
+        activeX:[
+        'MSXML2.XMLHTTP.3.0',
+        'MSXML2.XMLHTTP',
+        'Microsoft.XMLHTTP'
+        ]
 
     });
     /**
@@ -940,22 +1009,15 @@
             head = doc.getElementsByTagName("head")[0];
 
         if (doc && head && (node = doc.createElement(tag))) {
-            for (var attrib in attributes) {
-                if (attributes[attrib] && attributes.hasOwnProperty(attrib)
-                        && attrib in node) {
-                    node.setAttribute(attrib, attributes[attrib]);
-                }
-            }
+            forEach(attributes, function(value, attrib) {
+                value && (attrib in node) && node.setAttribute(attrib, value);
+            });
 
             if (callback) {
-                var cb = (callback.success || callback).createDelegate(
-                        callback.scope || null, [callback], 0);
+                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback], 0);
                 if (Ext.isIE) {
-
                     node.onreadystatechange = node.onload = function() {
-                        if (/loaded|complete|4/i.test(String(this.readyState))) {
-                            cb();
-                        }
+                        (/loaded|complete|4/i.test(String(this.readyState))) && cb();
                     }.createDelegate(node);
                 } else if (Ext.isSafari3 && tag == 'script') {
                     // has DOM2 support
@@ -967,14 +1029,11 @@
                      * Gecko/Safari has no event support for link tag so just
                      * defer the callback 50ms (optimistic)
                      */
-                    tag !== 'link' || Ext.isOpera ? Ext.get(node)
-                            .on('load', cb) : cb.defer(50);
+                    tag !== 'link' || Ext.isOpera ? Ext.get(node).on('load', cb) : cb.defer(50);
                 }
 
             }
-            if (!deferred) {
-                head.appendChild(node);
-            }
+            !deferred && head.appendChild(node);
         }
         return node;
 
@@ -1009,8 +1068,7 @@
                             statusCode = parseInt(statusCode, 10);
                             if (!isNaN(statusCode)) {
                                 var ev = 'status:' + statusCode;
-                                this.events[ev]
-                                        || (this.events[ev] = true);
+                                this.events[ev] || (this.events[ev] = true);
                                 this.on.apply(this, [ev].concat(args));
                             }
                         }, this);
@@ -1311,22 +1369,16 @@
             debug : false,
 
             /** @private */
-
             loadStack : new Array(),
-
 
             loaded : function(name) {
                 var module;
-                return (module = this.getModule(name))
-                        ? module.loaded === true
-                        : false;
+                return (module = this.getModule(name))? module.loaded === true : false;
             },
 
 
             getModule : function(name) {
-                if (name) {
-                    name = name.name ? name.name : modulate(name, false).name;
-                }
+                name && (name = name.name ? name.name : modulate(name, false).name);
                 return name ? this.modules[name] : null;
             },
             /*
@@ -1378,19 +1430,14 @@
                 var block = {
 
                     modules : new Array().concat(modules),
-                    // id : Ext.id(null,'OAV-'),
                     poll : function() {
-                        if (!this.polling)
-                            return;
+                        if (!this.polling)return;
 
                         var cb = callback, assert = false;
 
-                        var res = Ext.each(this.modules, function(arg, index,
-                                        args) {
-
-                                    return assert = (MM.loaded(arg) === true);
-
-                                }, this);
+                        var res = Ext.each(this.modules, function(arg, index, args) {
+                               return assert = (MM.loaded(arg) === true);
+                        }, this);
 
                         if (!assert && this.polling && !this.aborted) {
                             this.poll.defer(50, this);
@@ -1398,10 +1445,8 @@
                         }
 
                         this.stop();
-                        if (cb) {
-                            cb.call(scope, assert);
-                        }
-
+                        Ext.isFunction(cb) && cb.call(scope, assert);
+                        
                     },
 
                     polling : false,
@@ -1413,9 +1458,7 @@
 
                     stop : function() {
                         this.polling = false;
-                        if (this.timer) {
-                            clearTimeout(this.timer);
-                        }
+                        this.timer && clearTimeout(this.timer);
                         this.timer = null;
                     },
 
@@ -1503,13 +1546,11 @@
                             task.lastError = ex;
                             task.active = false;
                         }
-                        this.lastError = ex;
-
+                        
                         this.fireEvent('loadexception', this, task
                                         ? task.currentModule
-                                        : null, ex);
+                                        : null, this.lastError = ex);
                     }
-
                 }
 
                 return task;
@@ -1518,18 +1559,13 @@
 
             globalEval : function(data, scope, context) {
                 scope || (scope = window);
-
                 data = String(data || "").trim();
-
-                if (data.length === 0) {
-                    return false;
-                }
+                if (data.length === 0) {return false;}
                 try {
                     if (scope.execScript) {
                         // window.execScript in IE fails when scripts include
                         // HTML comment tag.
-                        scope.execScript(data.replace(/^<!--/, "").replace(
-                                /-->$/, ""));
+                        scope.execScript(data.replace(/^<!--/, "").replace(/-->$/, ""));
 
                     } else {
                         // context (target namespace) is only support on Gecko.
@@ -1647,7 +1683,11 @@
 
         };
         Ext.apply(Task.prototype, {
-
+            /**
+             *  @private
+             *  
+             */
+            
             start : function() {
                 this.active = true;
                 this.nextModule();
@@ -1660,21 +1700,23 @@
                 }
 
             },
+
+            /**
+             *  @private
+             *  
+             */
             doCallBacks : function(o, success, currModule, args) {
                 var cb;
                 if (currModule) {
                     var res = this.MM.fireEvent.apply(this.MM, [
                                     (success ? 'load' : 'loadexception'),
                                     this.MM, currModule].concat(args || new Array()));
-                    if (!success) {
-                        this.active = res;
-                    }
+                    !success && (this.active = res);
 
                     // Notify other pending async listeners
                     if (this.active && currModule.notify) {
 
-                        forEach(currModule.notify, function(chain, index,
-                                        chains) {
+                        forEach(currModule.notify, function(chain, index, chains) {
                                     if (chain) {
                                         chain.nextModule();
                                         chains[index] = null;
@@ -1684,6 +1726,11 @@
                     }
                 }
             },
+            
+            /**
+             *  @private
+             *  
+             */
             success : function(response) {
 
                 var module = response.argument.module.module, opt = response.argument.module, executable = (!opt.proxied
@@ -1700,10 +1747,7 @@
                             Ext.apply(module, {
                                 loaded : true,
                                 pending : false,
-                                contentType : response.getResponseHeader
-                                        ? response.getResponseHeader('Content-Type')
-                                                || ''
-                                        : '',
+                                contentType : response.getResponseHeader('Content-Type') || '',
                                 content : opt.cacheResponses
                                         || module.extension == "css" ? {
                                     text : response.responseText || null,
@@ -1715,22 +1759,19 @@
                             this.loaded.push(module);
                             var exception = executable
                                     && (!module.executed || opt.forced)
-                                    ? this.MM.globalEval(response.responseText,
-                                            opt.target)
+                                    ? this.MM.globalEval(response.responseText, opt.target)
                                     : true;
                             if (exception === true) {
                                 if (executable) {
                                     module.executed = true;
                                     this.executed.push(module);
                                 }
-                                cbArgs = [response, response.responseText,
-                                        module.executed];
+                                cbArgs = [response, response.responseText, module.executed];
                             } else {
                                 // coerce to actual module URL
                                 throw Ext.applyIf({
                                             fileName : module.url,
-                                            lineNumber : exception.lineNumber
-                                                    || 0
+                                            lineNumber : exception.lineNumber || 0
                                         }, exception);
                             }
                         }
@@ -1755,7 +1796,11 @@
 
             },
 
-
+            /**
+             *  @private
+             *  
+             */
+            
             failure : function(response) {
                 var module = response.argument.module.module, opt = response.argument.module;
 
@@ -1772,7 +1817,11 @@
                         }]);
             },
 
-
+            /**
+             *  @private
+             *  
+             */
+            
             nextModule : function() {
                 var module, transport, executable, options, url;
 
@@ -1849,25 +1898,16 @@
                                 moduleObj.transport = options.debug
                                         ? transport
                                         : null;
-                                if (options.method == 'DOM') {
-                                    moduleObj.element = transport;
-                                }
+                                options.method == 'DOM' && (moduleObj.element = transport);
+                                
                             }
 
-                            if (options.async) {
-                                break;
-                            }
+                            if (options.async) { break; }
 
                         } else {
-
-                            this.active = this.MM.fireEvent('alreadyloaded',
-                                    this.MM, moduleObj) !== false;
-
-                            if (executable) {
-                                this.executed.push(moduleObj);
-                            }
+                            this.active = this.MM.fireEvent('alreadyloaded', this.MM, moduleObj) !== false;
+                            executable && this.executed.push(moduleObj);
                             this.loaded.push(moduleObj);
-
                         }
 
                     } // if moduleObj
@@ -1879,15 +1919,21 @@
                 }
 
             },
-            // Private
-            /*
+            
+            /**
+             *  @private
              * Normalize requested modules and options into a sequential series
              * of load requests and inline callbacks
              */
 
             prepare : function(modules) {
 
-                var onAvailableList = new Array(), workList = new Array(), options = this.defOptions, mtype, MM = this.MM;
+                var onAvailableList = new Array(), 
+                    workList = new Array(), 
+                    options = this.defOptions, 
+                    mtype, 
+                    MM = this.MM;
+                    
                 var adds = new Array();
 
                 var expand = function(mods) {
@@ -1896,8 +1942,7 @@
                     var adds = new Array();
                     forEach(mods, function(module) {
 
-                        if (!module)
-                            return;
+                        if (!module)return;
                         var m;
 
                         mtype = typeof(module);
@@ -1920,7 +1965,6 @@
                                 }
 
                                 onAvailableList.push(m.name);
-
                                 break;
                             case 'object' : // or array of modules
                                 // coerce to array to support this notation:
@@ -1987,11 +2031,11 @@
                 this.options = options;
                 this.workList = workList.flatten().compact();
                 this.onAvailableList = onAvailableList.flatten().unique();
-                // console.info('prepared', this.workList.clone(),
-                // this.onAvailableList.clone(), options);
             },
-
-
+            
+            /**
+             * @private
+             */
             onComplete : function(loaded) { // called with scope of last module
                                             // in chain
                 var cb;
@@ -2009,22 +2053,20 @@
                 // cleanup single-use listeners from the previous request chain
                 if (this.unlisteners) {
                     forEach(this.unlisteners, function(block) {
-                                forEach(block, function(listener, name,
-                                                listeners) {
-                                            var fn = listener.fn || listener;
-                                            var scope = listener.scope
-                                                    || listeners.scope
-                                                    || this.MM;
-                                            var ev = listener.name || name;
-                                            this.MM.removeListener(ev, fn,
-                                                    scope);
-                                        }, this);
-                            }, this);
+                        forEach(block, function(listener, name,
+                                        listeners) {
+                                    var fn = listener.fn || listener;
+                                    var scope = listener.scope
+                                            || listeners.scope
+                                            || this.MM;
+                                    var ev = listener.name || name;
+                                    this.MM.removeListener(ev, fn,
+                                            scope);
+                                }, this);
+                    }, this);
                 }
                 this.active = false;
-
             }
-
         });
     }
 
@@ -2032,9 +2074,7 @@
 
 // Array, object iteration and clone support
 (function() {
-    Ext.stopIteration = {
-        stopIter : true
-    };
+    Ext.stopIteration = { stopIter : true };
 
     Ext.applyIf(Array.prototype, {
 
@@ -2066,14 +2106,14 @@
             var found = false;
             try {
                 this.forEach(function(item, index) {
-                            if (found = (deep
-                                    ? (item.include
-                                            ? item.include(value, deep)
-                                            : (item === value))
-                                    : item === value)) {
-                                throw Ext.stopIteration;
-                            }
-                        });
+                    if (found = (deep
+                            ? (item.include
+                                    ? item.include(value, deep)
+                                    : (item === value))
+                            : item === value)) {
+                        throw Ext.stopIteration;
+                    }
+                });
             } catch (exc) {
                 if (exc != Ext.stopIteration) {
                     throw exc;
@@ -2090,10 +2130,8 @@
                 return value;
             });
             this.forEach(function(value, index) {
-                        if (iterFn.call(scope, value, index)) {
-                            a.push(value);
-                        }
-                    });
+                iterFn.call(scope, value, index) && a.push(value);
+            });
             return a;
         },
 
@@ -2101,10 +2139,8 @@
                                     // elements
             var a = new Array();
             this.forEach(function(v) {
-                        (v === null || v === undefined)
-                                || a.push(deep && Ext.isArray(v) ? v
-                                        .compact() : v);
-                    }, this);
+                (v === null || v === undefined) || a.push(deep && Ext.isArray(v) ? v.compact() : v);
+            }, this);
             return a;
         },
 
@@ -2112,8 +2148,8 @@
                                 // [1,2,3,4,5,6]
             var a = new Array();
             this.forEach(function(v) {
-                        Ext.isArray(v) ? (a = a.concat(v)) : a.push(v);
-                    }, this);
+                Ext.isArray(v) ? (a = a.concat(v)) : a.push(v);
+            }, this);
             return a;
         },
 
@@ -2123,12 +2159,11 @@
                                                                     // [1,3,4,5]
             var a = new Array();
             this.forEach(function(value, index) {
-                        if (0 == index
-                                || (sorted ? a.last() != value : !a
-                                        .include(value, exact))) {
-                            a.push(value);
-                        }
-                    }, this);
+                if (0 == index
+                        || (sorted ? a.last() != value : !a.include(value, exact))) {
+                    a.push(value);
+                }
+            }, this);
             return a;
         },
         // search array values based on regExpression pattern returning
@@ -2145,10 +2180,8 @@
                 pattern = new RegExp(pattern);
             }
             this.forEach(function(value, index) {
-                        if (pattern.test(value)) {
-                            a.push(fn(value, index));
-                        }
-                    });
+                pattern.test(value) && a.push(fn(value, index));
+            });
             return a;
         },
         first : function() {
@@ -2272,26 +2305,24 @@
     // enumerate custom class properties (not prototypes)
     // usually only called by the global forEach function
     Ext.applyIf(Function.prototype, {
-                forEach : function(object, block, context) {
-                    if (typeof block != "function") {
-                        throw new TypeError();
+        forEach : function(object, block, context) {
+            if (typeof block != "function") {
+                throw new TypeError();
+            }
+            for (var key in object) {
+                // target defined properties/methods only
+                if (typeof this.prototype[key] == "undefined") { 
+                    try {
+                        block.call(context, object[key], key, object);
+                    } catch (e) {
                     }
-                    for (var key in object) {
-                        if (typeof this.prototype[key] == "undefined") { // target
-                                                                            // defined
-                                                                            // properties/methods
-                                                                            // only
-                            try {
-                                block.call(context, object[key], key, object);
-                            } catch (e) {
-                            }
-                        }
-                    }
-                },
-                clone : function(deep) {
-                    return this;
                 }
-            });
+            }
+        },
+        clone : function(deep) {
+            return this;
+        }
+    });
 
     // character enumeration
     Ext.applyIf(String.prototype, {
@@ -2415,7 +2446,7 @@
 	          }
 	          if (!isSupported && el) {
 	            el.setAttribute && el.setAttribute(eventName, 'return;');
-	            isSupported = typeof el[eventName] == 'function';
+	            isSupported = Ext.isFunction(el[eventName]);
 	          }
 	          //save the cached result for future tests
 	          cache[getKey(evName, el)] = isSupported;
@@ -2426,6 +2457,7 @@
 	    })(),
         
         capabilities : {
+            hasActiveX : !!window.ActiveXObject,
             hasFlash : (function(){
                 //Check for ActiveX first because some versions of IE support navigator.plugins, just not the same as other browsers
 		        if(window.ActiveXObject){
