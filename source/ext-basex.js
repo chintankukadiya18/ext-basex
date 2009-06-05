@@ -1,6 +1,6 @@
 /* global Ext */
 /*
- * ext-basex 3.3
+ * ext-basex 3.4
  * ***********************************************************************************
  *
  * Ext.lib.Ajax enhancements:
@@ -339,22 +339,28 @@
         async : true,
 
         /** private */
-        createXhrObject : function(transactionId) {
+        createXhrObject : function(transactionId, options) {
             var obj = {
                 status : {
                     isError : false
                 },
                 tId : transactionId
             }, http;
+            options || (options = {});
             try {
-                if (!!this.forceActiveX) {
+                if (window.ActiveXObject && !!this.forceActiveX) {
                     throw ("IE7forceActiveX");
                 }
                 obj.conn = new XMLHttpRequest();
             } catch (eo) {
-                for (var i = 0; i < this.activeX.length; ++i) {
+                var actX = [].concat( window.ActiveXObject ?
+                    //These are only versions of XHR that support multipart responses
+                    ( options.multiPart ? this.activeXMultipart : this.activeX ) 
+                    : [] );
+                    
+                for (var i = 0, l = actX.length; i < l; i++) {
                     try {
-                        obj.conn = new ActiveXObject(this.activeX[i]);
+                        obj.conn = new ActiveXObject(actX[i]);
                         break;
                     } catch (e) {
                     }
@@ -370,39 +376,44 @@
 
         encoder : encodeURIComponent,
 
-        serializeForm : function(form) {
-            var fElements = form.elements || (document.forms[form] || Ext.getDom(form)).elements,
-                        hasSubmit = false,
-                        encoder = this.encoder,
-                        element,
-                        options,
-                        name,
-                        val,
-                        data = '',
-                        type;
-            Ext.each(fElements, function(element) {
-                name = element.name;
-                type = element.type;
-                if (!element.disabled && name){
-                    if(/select-(one|multiple)/i.test(type)){
-                        Ext.each(element.options, function(opt) {
-                            if (opt.selected) {
-                                data += String.format("{0}={1}&",
-                                     encoder(name),
-                                     (opt.hasAttribute ? opt.hasAttribute('value') : opt.getAttribute('value') !== null) ? opt.value : opt.text);
-                            }
-                        });
-                    } else if(!/file|undefined|reset|button/i.test(type)) {
-                        if(!(/radio|checkbox/i.test(type) && !element.checked) && !(type == 'submit' && hasSubmit)){
-                            data += encoder(name) + '=' + encoder(element.value) + '&';
-                            hasSubmit = /submit/i.test(type);
-                        }
-                    }
-                }
-            });
-            return data.substr(0, data.length - 1);
-
-        },
+        serializeForm : function(){ 
+            var reSelect = /select-(one|multiple)/i,
+                reInput = /file|undefined|reset|button/i,
+                reChecks = /radio|checkbox/i;
+        
+	        return function(form) {
+	            var fElements = form.elements || (document.forms[form] || Ext.getDom(form)).elements,
+	                        hasSubmit = false,
+	                        encoder = this.encoder,
+	                        element,
+	                        options,
+	                        name,
+	                        val,
+	                        data = '',
+	                        type;
+	            Ext.each(fElements, function(element) {
+	                name = element.name;
+	                type = element.type;
+	                if (!element.disabled && name){
+	                    if(reSelect.test(type)){
+	                        Ext.each(element.options, function(opt) {
+	                            if (opt.selected) {
+	                                data += String.format("{0}={1}&",
+	                                     encoder(name),
+	                                     (opt.hasAttribute ? opt.hasAttribute('value') : opt.getAttribute('value') !== null) ? opt.value : opt.text);
+	                            }
+	                        });
+	                    } else if(!reInput.test(type)) {
+	                        if(!(reChecks.test(type) && !element.checked) && !(type == 'submit' && hasSubmit)){
+	                            data += encoder(name) + '=' + encoder(element.value) + '&';
+	                            hasSubmit = /submit/i.test(type);
+	                        }
+	                    }
+	                }
+	            });
+	            return data.substr(0, data.length - 1);
+            };
+        }(),
 
         /** private */
         getHttpStatus : function(reqObj) {
@@ -813,7 +824,7 @@
                     options.async = true; // force timeout support
 
                 } else {
-                    o = this.createXhrObject(tId);
+                    o = this.createXhrObject(tId, options);
                 }
                 if (o) {
                     this.transactionId++;
@@ -991,6 +1002,12 @@
             o && (o.conn = null);
             o = null;
         },
+        
+        //These are only current versions of ActiveX XHR that support multipart responses
+        activeXMultipart : [
+        'MSXML2.XMLHTTP.6.0', 
+        'MSXML3.XMLHTTP'],
+        
         activeX:[
         'MSXML2.XMLHTTP.3.0',
         'MSXML2.XMLHTTP',
