@@ -1367,12 +1367,10 @@
      * Primary clone Function
      */
     var clone = function(obj, deep) {
-
+        if (!obj) {return obj;}
         if (Ext.isFunction(obj.clone)) {
             return obj.clone(deep);
         }
-
-        if (!obj) {return obj;}
 
         var o = {};
         forEach(obj, function(val, name, objAll) {
