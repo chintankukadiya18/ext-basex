@@ -204,9 +204,7 @@
         },
         
         createQueue : function(config) {
-            if (!config) {
-                return null;
-            }
+            if (!config) {return null;}
 
             var q = new A.Queue(config);
             q.manager = this;
@@ -384,6 +382,17 @@
             return obj;
 
         },
+                
+        createExceptionObject: function (tId, callbackArg, isAbort, isTimeout) {          
+            return {
+                tId        : tId,
+                status     : isAbort ? -1 : 0,
+                statusText : isAbort ? 'transaction aborted' : 'communication failure',
+                    isAbort: isAbort,
+                  isTimeout: isTimeout,
+                  argument : callbackArg
+            };
+        },  
 
         /* Replaceable Form encoder */
 
@@ -516,7 +525,7 @@
                 }
             }
 
-            !o.isPart && this.releaseObject(o);
+            (!o.isPart || o.status.isError) && this.releaseObject(o);
             return responseObject; 
 
         },
@@ -917,7 +926,6 @@
 	                }
 	                this.setHeaders(o);
 	                
-	                
 	                if (!this.events
                             || this.fireEvent('beforesend', o, method, uri,
                                     callback, postData, options) !== false) {
@@ -984,9 +992,7 @@
         initHeader : function(label, value) {
             (this.headers = this.headers || {})[label] = value;
         },
-        
-        
-            
+          
         /** @private 
          * General readyStateChange multiPart handler 
          */
@@ -1303,9 +1309,7 @@
         },
 
         clone : function(deep) {
-            if (!deep) {
-                return this.concat();
-            }
+            if (!deep) {return this.concat();}
 
             var length = this.length || 0, t = new Array(length);
             while (length--) {
@@ -1368,9 +1372,7 @@
      */
     var clone = function(obj, deep) {
         if (!obj) {return obj;}
-        if (Ext.isFunction(obj.clone)) {
-            return obj.clone(deep);
-        }
+        if (Ext.isFunction(obj.clone)) {return obj.clone(deep);}
 
         var o = {};
         forEach(obj, function(val, name, objAll) {
@@ -1586,7 +1588,6 @@
             hasXpath   : !!document.evaluate,
             hasBasex   : true
         }
-
 
     });
 
