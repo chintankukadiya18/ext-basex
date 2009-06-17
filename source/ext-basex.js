@@ -348,20 +348,19 @@
                 status : {
                     isError : false
                 },
-                tId : transactionId
+                
+                tId   : transactionId
             }, 
             ecode = null;
             
             options || (options = {});
             try {
-                if (window.ActiveXObject && !!Ext.value(options.forceActiveX, this.forceActiveX)) {
+                options.xdomain && window.XDomainRequest && (obj.conn =  new XDomainRequest());
+                
+                if (!defined(obj.conn) && window.ActiveXObject && !!Ext.value(options.forceActiveX, this.forceActiveX)) {
                     throw ("IE7forceActiveX");
                 }
-                obj.conn = options.xdomain ?
-                    (Ext.isIE8 ? 
-                        (window.XDomainRequest ? new XDomainRequest() : undefined)
-                        : new XMLHttpRequest()) 
-                    : new XMLHttpRequest();
+                obj.conn || (obj.conn = new XMLHttpRequest());
                 
             } catch (eo) {
                 var actX = window.ActiveXObject ?
@@ -422,7 +421,8 @@
 	                            if (opt.selected) {
 	                                data += String.format("{0}={1}&",
 	                                     encoder(name),
-	                                     (opt.hasAttribute ? opt.hasAttribute('value') : opt.getAttribute('value') !== null) ? opt.value : opt.text);
+	                                     (opt.hasAttribute ? opt.hasAttribute('value') : 
+                                           opt.getAttribute('value') !== null) ? opt.value : opt.text);
 	                            }
 	                        });
 	                    } else if(!reInput.test(type)) {
@@ -445,14 +445,14 @@
                 statusText : '',
                 isError : false,
                 isLocal : false,
-                isOK : false,
+                isOK : true,
                 error : null,
                 isAbort : false,
                 isTimeout : false
             };
 
             try {
-                if (!reqObj) { throw ('noobj'); }
+                if (!reqObj || !('status' in reqObj)) { throw ('noobj'); }
                 statObj.status = reqObj.status;
                 statObj.readyState = reqObj.readyState;
                 statObj.isLocal = (!reqObj.status && location.protocol == "file:")
@@ -463,7 +463,7 @@
 
                 statObj.statusText = reqObj.statusText || '';
             } catch (e) {
-            } // status may not avail/valid yet (or called too early).
+            } // status may not avail/valid yet, called too early, or status not support by the transport
 
             return statObj;
 
@@ -600,7 +600,7 @@
                 }
 
                 try {
-                    headerStr = (o.conn.getAllResponseHeaders() || '');
+                    headerStr = (defined(o.conn.getAllResponseHeaders) ? o.conn.getAllResponseHeaders() : null ) || '';
                     var header = headerStr.split('\n');
 	                for (var i = 0; i < header.length; i++) {
 	                    var delimitPos = header[i].indexOf(':');
@@ -997,11 +997,12 @@
          * General readyStateChange multiPart handler 
          */
         onStateChange : function(o, callback, mode) {
-            
-            if(o.conn && (mode === 'load' || ('readyState' in o.conn && o.conn.readyState > 2))){
+            if(!o.conn){ return; }
+            var readyState = 'readyState' in o.conn ? o.conn.readyState : 0;
+            if(mode === 'load' || readyState > 2){
                 var ct;
                 try{ct = o.conn.getResponseHeader('Content-Type')||'';}
-                catch(exRs){}
+                catch(exRs){ }
                 
                 if(ct && /multipart\//i.test(ct)){
                     var r = null, boundary = ct.split('"')[1], kb = '--' + boundary;
@@ -1039,8 +1040,7 @@
                     
                 }
             }
-            o.conn && (o.conn.readyState == 4 || mode == 'load') && A.handleTransactionResponse(o, callback);
-            
+            (readyState === 4 || mode === 'load') && A.handleTransactionResponse(o, callback);
             this.events && this.fireEvent.apply(this, ['readystatechange'].concat(Array.slice(arguments, 0)));
         },
         
