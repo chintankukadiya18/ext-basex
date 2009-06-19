@@ -998,16 +998,16 @@
          */
         onStateChange : function(o, callback, mode) {
             if(!o.conn){ return; }
-            var readyState = 'readyState' in o.conn ? o.conn.readyState : 0;
+            var C = o.conn, readyState = 'readyState' in C ? C.readyState : 0;
             if(mode === 'load' || readyState > 2){
                 var ct;
-                try{ct = o.conn.getResponseHeader('Content-Type')||'';}
+                try{ct = C.contentType || C.getResponseHeader('Content-Type') || '';}
                 catch(exRs){ }
                 
                 if(ct && /multipart\//i.test(ct)){
                     var r = null, boundary = ct.split('"')[1], kb = '--' + boundary;
                     o.multiPart = true;
-                    try{r = o.conn.responseText;}catch(ers){}
+                    try{r = C.responseText;}catch(ers){}
                      
                     var p = r ? r.split(kb) : null;
                         
@@ -1486,31 +1486,31 @@
           ]),
 
         isArray : function(v){
-           return Object.prototype.toString.apply(v) === '[object Array]';
+           return Object.prototype.toString.apply(v) == '[object Array]';
         },
 
         isObject:function(obj){
-            return (obj !== null) && typeof obj === 'object';
+            return (obj !== null) && typeof obj == 'object';
         },
 
         isDocument : function(obj){
-            return Object.prototype.toString.apply(obj) === '[object HTMLDocument]' || (obj && obj.nodeType === 9);
+            return Object.prototype.toString.apply(obj) == '[object HTMLDocument]' || (obj && obj.nodeType === 9);
         },
 
         isElement : function(obj){
-            return obj && Ext.type(obj)=== 'element';
+            return obj && Ext.type(obj)== 'element';
         },
 
         isEvent : function(obj){
-            return Object.prototype.toString.apply(obj) === '[object Event]' || (Ext.isObject(obj) && !Ext.type(o.constructor) && (window.event && o.clientX && o.clientX === window.event.clientX));
+            return Object.prototype.toString.apply(obj) == '[object Event]' || (Ext.isObject(obj) && !Ext.type(o.constructor) && (window.event && o.clientX && o.clientX === window.event.clientX));
         },
 
         isFunction: function(obj){
-            return typeof obj === 'function';
+            return typeof obj == 'function';
         },
 
         isString : function(obj){
-            return Ext.type(obj)==='string';
+            return Ext.type(obj)=='string';
         },
 
         isEventSupported : (function(){
@@ -1558,6 +1558,11 @@
 
         capabilities : {
             hasActiveX : !!window.ActiveXObject,
+            hasXDR  : function(){
+                return (Ext.isIE && defined(window.XDomainRequest)) 
+                    || Ext.isSafari4 
+                    || (Ext.isGecko && 'withCredentials' in new XMLHttpRequest()) ;
+            }(),
             hasFlash : (function(){
                 //Check for ActiveX first because some versions of IE support navigator.plugins, just not the same as other browsers
                 if(window.ActiveXObject){
@@ -1582,7 +1587,7 @@
                 //Return false if ActiveX and nagivator.plugins are not supported
                 return false;
                 })(),
-            hasCookies : !!navigator.cookieEnabled && navigator.cookieEnabled,
+            hasCookies : !!navigator.cookieEnabled ,
             hasCanvas  : !!document.createElement("canvas").getContext,
             hasSVG     : !!(document.createElementNS && document.createElementNS('http://www.w3.org/2000/svg', 'svg').width),
             hasXpath   : !!document.evaluate,
