@@ -1185,7 +1185,7 @@
     Ext.applyIf(Array.prototype, {
 
         /*
-         * Fix for Opera, which does not seem to include the map
+         * Fix for IE, Opera < 9.5, which does not seem to include the map
          * function on Array's
          */
         map : function(fun, scope) {
@@ -1201,6 +1201,28 @@
                 }
             }
             return res;
+        },
+        
+        /**
+         * Return true of the passed Function test true of ANY array elememt.
+         * (added for IE)
+         */
+        some  : function(fn){
+          var f= Ext.isFunction(fn) ? fn : function(){};
+          var i=0, l=this.length, test=false;
+          while(i<l && !(test=!!f(this[i++]))){}
+          return test;
+        },
+        
+        /**
+         * Return true of the passed Function test true of ALL array elememts.
+         * (added for IE)
+         */
+        every  : function(fn){
+          var f= Ext.isFunction(fn) ? fn : function(){};
+          var i=0, l=this.length, test=true;
+          while(i<l && (test=!!f(this[i++]))){}
+          return test;
         },
 
         include : function(value, deep) { // Boolean: is value present
@@ -1258,6 +1280,20 @@
             }, this);
             return a;
         },
+        
+        indexOf : function(o){
+	       for (var i = 0, len = this.length; i < len; i++){
+	           if(this[i] == o) return i;
+	       }
+	       return -1;
+	    },
+
+        
+        lastIndexOf : function(val){
+            var i= this.length-1;
+            while(i>-1 && this[i] != val){i--;}
+            return i;
+        },
 
         unique : function(sorted /* sort optimization */, exact) { // unique:
                                                                     // [1,3,3,4,4,5]
@@ -1290,6 +1326,7 @@
             });
             return a;
         },
+        
         first : function() {
             return this[0];
         },
@@ -1382,13 +1419,20 @@
         return o;
     };
 
-    // Permits: Array.slice(arguments, 1);
-    if (!Array.slice) { // mozilla already supports this
-        var slice = Array.prototype.slice;
-        Array.slice = function(object) {
-            return slice.apply(object, slice.call(arguments, 1));
-        };
-    }
+    var slice = Array.prototype.slice;
+    var filter = Array.prototype.filter;
+    Ext.applyIf(Array,{
+	    // Permits: Array.slice(arguments, 1); // mozilla already supports this
+	    slice: function(obj) {
+	        return slice.apply(obj, slice.call(arguments, 1));
+	        },
+        //String filter iteration
+        filter: function(obj, fn){
+            var t = obj && typeof obj == 'string' ? obj.split('') : [];
+            return filter.call(t, fn);
+        }
+    });
+    
     //Add clone function to prototypes
     forEach([Number, RegExp, Boolean], function(t) {
                 t.prototype.clone = function(deep) {
@@ -1438,6 +1482,20 @@
 
         trim : function() {
             var re = /^\s+|\s+$/g;
+            return function() {
+                return this.replace(re, "");
+            };
+        }(),
+        
+        trimRight : function() {
+            var re = /^|\s+$/g;
+            return function() {
+                return this.replace(re, "");
+            };
+        }(),
+        
+        trimLeft : function() {
+            var re = /^\s+|$/g;
             return function() {
                 return this.replace(re, "");
             };
@@ -1523,7 +1581,7 @@
             var cache = {};
             //Get a tokenized string unique to the node and event type
             var getKey = function(type, el){
-                return (el ?
+                return (el =Ext.getDom(el) ?
                            (Ext.isElement(el) || Ext.isDocument(el) ?
                                 el.nodeName.toLowerCase() :
                                     el.id || Ext.type(el))
@@ -1541,8 +1599,8 @@
 
               if(!isSupported){
                 var eventName = 'on' + evName;
-                el = testEl || document.createElement(TAGNAMES[eventName] || 'div');
-                isSupported = (eventName in el);
+                el = Ext.getDom(testEl) || document.createElement(TAGNAMES[eventName] || 'div');
+                isSupported = (el && (eventName in el));
               }
               if (!isSupported && el) {
                 el.setAttribute && el.setAttribute(eventName, 'return;');
