@@ -36,10 +36,15 @@
       {throw "Ext and ext-basex 3.1 or higher required.";}
 
   (function(){
-
+    
     /**
      * private -- <script and link> tag support
      */
+    var A = Ext.lib.Ajax,
+        StopIter = "StopIteration",
+        defined = function(test){return typeof test !== 'undefined';},
+        emptyFn = function(){};
+
     var domNode = function(tag, attributes, callback, context, deferred) {
         attributes = Ext.apply({}, attributes || {});
         context || (context = window);
@@ -47,45 +52,34 @@
         var node = null, doc = context.document,
             head = doc.getElementsByTagName("head")[0];
 
-        if (doc && head && (node = doc.createElement(tag))) {
-            forEach(attributes, function(value, attrib) {
-                value && (attrib in node) && node.setAttribute(attrib, value);
+        if (doc && head && (node = Ext.get(doc.createElement(tag)))) {
+            var ndom = Ext.getDom(node);
+            ndom && forEach(attributes, function(value, attrib) {
+                value && (attrib in ndom) && ndom.setAttribute(attrib, value);
             });
 
-            if (callback) {
+            if (callback && node) {
                 var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback], 0);
+                
                 if (Ext.isIE) {
-                    node.onreadystatechange = node.onload = function() {
+                    ndom.onreadystatechange = ndom.onload = function() {
                         if(/loaded|complete|4/i.test(String(this.readyState))){
-                            this.onreadystatechange = this.onload = Ext.emptyFn;
+                            this.onreadystatechange = this.onload = emptyFn;
                             cb.defer(4);
                         }
-                    }.createDelegate(node);
-                } else if (Ext.isSafari3 && tag == 'script') {
-                    // has DOM2 support
-                    node.addEventListener("load", cb);
-                } else if (Ext.isSafari) {
+                    }.createDelegate(ndom);
+                }else if( Ext.isEventSupported ('load', node)){
+                    node.on("load", cb);
+                }else {
                     cb.defer(50);
-                } else {
-                    /*
-                     * Gecko/Safari has no event support for link tag so just
-                     * defer the callback 50ms (optimistic)
-                     */
-                    tag !== 'link' || Ext.isOpera ? Ext.get(node).on('load', cb) : cb.defer(50);
                 }
-
             }
-            !deferred && head.appendChild(node);
+            !deferred && head.appendChild(ndom);
         }
-        return node;
+        return ndom;
     };
-
-    var A = Ext.lib.Ajax,
-        StopIter = "StopIteration",
-        defined = function(test){return typeof test !== 'undefined';};
-
+    
     /**
-     *
      * @class Ext.ux.ModuleManager
      * @version 1.2
      * ***********************************************************************************
@@ -1316,7 +1310,6 @@
           } else {
               alert((title?title+'\n':'')+msg );
           }
-
       }
     });
 
@@ -1329,6 +1322,14 @@
            items : {title:'Grid', JIT:'edit-grid',...}
          }
      });
+     
+     or
+     
+     var grid = $JIT.create({
+         require : [{timeout: 15000}, 'customGrid.js'],
+         title : 'User List',
+         ....
+      });
     */
 
     var mgr = Ext.ComponentMgr,
@@ -1336,24 +1337,25 @@
             {async    :false,
              method   :'GET',
              callback : function(completed){
-
-                 if(!completed){
+                 !completed && 
                      L.fireEvent('loadexception', L, this.currentModule, "Ext.ComponentMgr:$JIT Load Failure");
-                     }
              },
              scope : L
         },
-        setAsynch =  function(rm){
-           return typeof rm === 'object' ? Ext.apply({},load_options, rm): rm;
+        assert =  function(rm){
+           return !!rm && typeof rm == 'object' ? Ext.apply({},load_options, rm): rm;
         };
 
     if(mgr){
        
-       Ext.create = mgr.create = mgr.create.createInterceptor( function(config, defaultType){
+       $JIT.create =
+       Ext.create = 
+       mgr.create = 
+       mgr.create.createInterceptor( function(config, defaultType){
 
-               var require;
-               if(require = config.require || config.JIT){
-                   require = [load_options].concat(Ext.isArray( require)? require.map( setAsynch ): setAsynch(require));
+               var require= config.require || config.JIT;
+               if(!!require){
+                   require = [load_options].concat(require).map( assert ).compact();
                    //This synchronous request will block until completed
                    Ext.require.apply(Ext, require);
 
