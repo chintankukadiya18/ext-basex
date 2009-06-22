@@ -57,7 +57,13 @@
  * Donations are welcomed: http://donate.theactivegroup.com
  *
  */
-
+ /*window.Ext ||(
+ 
+      
+   Ext = {
+     lib:{}
+     }
+   );*/
 (function() {
     var A = Ext.lib.Ajax,
         defined = function(test){return typeof test !== 'undefined';},
@@ -748,6 +754,8 @@
                     function(value, key) { this.initHeader(key, value, false); },this);
 
                 var cType;
+                // The Content-Type specified on options.headers always has priority over 
+                // a calculated value.
                 if (cType = (this.headers ? this.headers['Content-Type'] || null : null)) {
                     // remove to ensure only ONE is passed later.(per RFC)
                     delete this.headers['Content-Type'];
@@ -920,7 +928,7 @@
                             }, callback.timeout)));
                     }
                     
-                    if (this.useDefaultXhrHeader) {
+                    if (this.useDefaultXhrHeader && !options.xdomain) {
 	                    this.defaultHeaders['X-Requested-With'] ||
 	                        this.initHeader('X-Requested-With', this.defaultXhrHeader, true);
 	                }
@@ -1569,58 +1577,39 @@
 
         isString : function(obj){
             return Ext.type(obj)=='string';
-        },
-
-        isEventSupported : (function(){
-            var TAGNAMES = {
-              'select':'input','change':'input',
-              'submit':'form','reset':'form',
-              'error':'img','load':'img','abort':'img'
-            };
-            //Cached results
-            var cache = {};
-            //Get a tokenized string unique to the node and event type
-            var getKey = function(type, el){
-                return (el =Ext.getDom(el) ?
-                           (Ext.isElement(el) || Ext.isDocument(el) ?
-                                el.nodeName.toLowerCase() :
-                                    el.id || Ext.type(el))
-                       : 'div') + ':' + type;
-            };
-
-            return function (evName, testEl) {
-
-              var key = getKey(evName, testEl);
-              if(key in cache){
-                //Use a previously cached result if available
-                return cache[key];
-              }
-              var el, isSupported = window.Event ? String(evName).toUpperCase() in window.Event: false;
-
-              if(!isSupported){
-                var eventName = 'on' + evName;
-                el = Ext.getDom(testEl) || document.createElement(TAGNAMES[eventName] || 'div');
-                isSupported = (el && (eventName in el));
-              }
-              if (!isSupported && el) {
-                el.setAttribute && el.setAttribute(eventName, 'return;');
-                isSupported = Ext.isFunction(el[eventName]);
-              }
-              //save the cached result for future tests
-              cache[getKey(evName, el)] = isSupported;
-              el = null;
-              return isSupported;
-            };
-
-        })(),
-
-        capabilities : {
+        }
+        
+    });
+     /**
+      * @class Ext
+      * @singleton
+      * @constructor
+      * @description Ext Adapter extensions
+      */
+          
+    /**
+     * @class Ext.capabilities
+     * @singleton
+     * @desc Describes Detected Browser capabilities.
+     */
+    Ext.capabilities = {
+            /**
+             * @property {Boolean} hasActiveX True if the Browser support (and is enabled) ActiveX.
+             */
             hasActiveX : !!window.ActiveXObject,
+            
+            /**
+             * @property {Boolean} hasXDR True, if the Browser has Cross-Domain Ajax request capability.
+             */
             hasXDR  : function(){
                 return (Ext.isIE && defined(window.XDomainRequest)) 
                     || Ext.isSafari4 
                     || (Ext.isGecko && 'withCredentials' in new XMLHttpRequest()) ;
             }(),
+            
+            /**
+             * @property {Boolean} hasFlash True if the Flash Browser plugin is installed.
+             */
             hasFlash : (function(){
                 //Check for ActiveX first because some versions of IE support navigator.plugins, just not the same as other browsers
                 if(window.ActiveXObject){
@@ -1645,13 +1634,78 @@
                 //Return false if ActiveX and nagivator.plugins are not supported
                 return false;
                 })(),
+            
+                /**
+             * @property {Boolean} hasCookies True if the browser cookies are enabled/supported.
+             */
             hasCookies : !!navigator.cookieEnabled ,
+            
+            /**
+             * @property {Boolean} hasCanvas True if the browser has canvas Element support.
+             */
             hasCanvas  : !!document.createElement("canvas").getContext,
+            
+            /**
+             * @property {Boolean} hasSVG True if the browser has SVG support.
+             */
             hasSVG     : !!(document.createElementNS && document.createElementNS('http://www.w3.org/2000/svg', 'svg').width),
+            
+            /**
+             * @property {Boolean} hasXpath True if the browser has Xpath query support.
+             */
             hasXpath   : !!document.evaluate,
-            hasBasex   : true
-        }
-
-    });
+            
+            hasBasex   : true,
+            
+            /**
+	         * Determine whether a specified DOMEvent is supported by a given HTMLElement or Object.
+	         * @param {String} type The eventName (without the 'on' prefix)
+	         * @param {HTMLElement/Object} testEl (optional) A specific element to test against, otherwise a mapping
+	         * based on the passed eventName is used, or DIV as default. 
+	         * @return {Boolean} True if the passed object supports the named event. 
+	         */  
+	         isEventSupported : function(evName, testEl){
+	            var TAGNAMES = {
+	              'select':'input','change':'input',
+	              'submit':'form','reset':'form',
+	              'error':'img','load':'img','abort':'img'
+	            };
+	            //Cached results
+	            var cache = {};
+	            //Get a tokenized string unique to the node and event type
+	            var getKey = function(type, el){
+	                return (el =Ext.getDom(el) ?
+	                           (Ext.isElement(el) || Ext.isDocument(el) ?
+	                                el.nodeName.toLowerCase() :
+	                                    el.id || Ext.type(el))
+	                       : 'div') + ':' + type;
+	            };
+	
+	            return function (evName, testEl) {
+	
+	              var key = getKey(evName, testEl);
+	              if(key in cache){
+	                //Use a previously cached result if available
+	                return cache[key];
+	              }
+	              var el, isSupported = window.Event ? String(evName).toUpperCase() in window.Event: false;
+	
+	              if(!isSupported){
+	                var eventName = 'on' + evName;
+	                el = Ext.getDom(testEl) || document.createElement(TAGNAMES[eventName] || 'div');
+	                isSupported = (el && (eventName in el));
+	              }
+	              if (!isSupported && el) {
+	                el.setAttribute && el.setAttribute(eventName, 'return;');
+	                isSupported = Ext.isFunction(el[eventName]);
+	              }
+	              //save the cached result for future tests
+	              cache[getKey(evName, el)] = isSupported;
+	              el = null;
+	              return isSupported;
+	            };
+	
+	        }()
+        };
 
 })();
