@@ -482,7 +482,7 @@
             callback = callback || {};
             var responseObject = null;
             o.isPart || A.activeRequests--;
-
+            
             if (!o.status.isError) {
                 o.status = this.getHttpStatus(o.conn);
                 /*
@@ -491,14 +491,14 @@
                  */
                 responseObject = this.createResponseObject(o, callback.argument, isAbort);
             }
-
+            o.isPart || this.releaseObject(o);
 
             /*
              * checked again in case exception was raised - ActiveX was
              * disabled during XML-DOM creation? And mixin everything the
              * XHR object had to offer as well
              */
-             o.status.isError && (responseObject = Ext.apply({}, responseObject || {},
+            o.status.isError && (responseObject = Ext.apply({}, responseObject || {},
                         this.createExceptionObject(o.tId, callback.argument,
                           (isAbort? isAbort: false), isTimeout)));
 
@@ -516,6 +516,7 @@
                                     callback, isAbort, isTimeout) !== false) {
                         
                         var cb = o.isPart? 'onpart':'success';
+                        
                         Ext.isFunction(callback[cb]) && 
                             callback[cb].call(callback.scope || null,responseObject);
                         
@@ -525,13 +526,12 @@
                             || this.fireEvent('exception', o, responseObject,
                                     callback, isAbort, isTimeout) !== false) {
                         Ext.isFunction(callback.failure) &&
-                            callback.failure.call(callback.scope || null, responseObject);
+                            callback.failure.call(callback.scope || null, responseObject, responseObject.fullStatus.error);
                         
                     }
                 }
             }
 
-            (!o.isPart || o.status.isError) && this.releaseObject(o);
             return responseObject; 
 
         },
@@ -540,7 +540,7 @@
          * Release the allocated XHR object and reset any timers
          */
         releaseObject:function(o){
-            if(o && Ext.value(o.tId,false)){
+            if(o && Ext.value(o.tId,-1)+1){
 	            if(this.poll[o.tId]){
 	                window.clearInterval(this.poll[o.tId]);
 	                delete this.poll[o.tId];
@@ -549,9 +549,8 @@
 	                window.clearInterval(this.timeout[o.tId]);
 		            delete this.timeout[o.tId];
 	            }
-	            o.conn = null ;
-	            o = null;
             }
+            o && (o.conn = null) ;
         },
 
         /**
@@ -607,12 +606,12 @@
 
                 try {
                     headerStr = (defined(o.conn.getAllResponseHeaders) ? o.conn.getAllResponseHeaders() : null ) || '';
-                    var header = headerStr.split('\n');
-	                for (var i = 0; i < header.length; i++) {
-	                    var delimitPos = header[i].indexOf(':');
-	                    delimitPos != -1 &&
-	                        (headerObj[header[i].substring(0, delimitPos).toLowerCase()] = header[i]
-	                                .substring(delimitPos + 2));
+                    var header = headerStr.split('\n'), s;
+	                for (var i = 0, hl = header.length; i < hl; i++) {
+                        s = header[i].split(':');
+                        s && s.first() && 
+	                        (headerObj[s.first().trim().toLowerCase()] = (s.last()||'').trim());
+	                                
 	                }
                 } catch (ex1) {}
                 finally{ obj.contentType = obj.contentType || headerObj['content-type'] || ''; }
@@ -682,7 +681,7 @@
                         status  : o.status.status,
                         statusText : o.status.statusText,
                         contentType : obj.contentType || headerObj['content-type'],
-                        getResponseHeader : function(header){return headerObj[(header||'').toLowerCase()];},
+                        getResponseHeader : function(header){return headerObj[(header||'').trim().toLowerCase()];},
                         getAllResponseHeaders : function(){return headerStr},
                         fullStatus : o.status,
                         isPart : o.isPart || false
@@ -957,11 +956,11 @@
             if (o && o.queued && o.request) {
                 o.request.active = o.queued = false;
                 this.events && this.fireEvent('abort', o, callback);
-                
+                return true;
             } else if (o && this.isCallInProgress(o)) {
                 
                 if (!this.events || this.fireEvent(isTimeout ? 'timeout' : 'abort', o, callback)!== false){
-	                o.conn.abort();
+	                Ext.isFunction(o.conn.abort) && o.conn.abort();
 	                o.status.isAbort = !(o.status.isTimeout = isTimeout || false);
                     this.handleTransactionResponse(o, callback, o.status.isAbort, isTimeout);
                 }
@@ -970,8 +969,23 @@
                 return false;
             }
         },
+        
+        isCallInProgress : function(o) {
+            // if there is a connection and readyState is supported, and not 0 or 4
+            if( o && o.conn ){
+                if('readyState' in o.conn && {0:true,4:true}[o.conn.readyState]){
+                    return false;
+                }
+                return true;
+            }
+            return false;
+        },
 
-
+        /**
+         * Clears the Browser authentication Cache
+         * @param {String} url {optional) reset url for non-IE browsers
+         * @return void
+         */
         clearAuthenticationCache : function(url) {
 
             try {
@@ -991,9 +1005,8 @@
                         xmlhttp.abort.defer(100, xmlhttp);
                     }
                 }
-            } catch (e) { // There was an error
-
-            }
+            } catch (e) {} // There was an error
+           
         },
 
         // private
@@ -1006,7 +1019,8 @@
          */
         onStateChange : function(o, callback, mode) {
             if(!o.conn){ return; }
-            var C = o.conn, readyState = 'readyState' in C ? C.readyState : 0;
+            
+            var C = o.conn, readyState = ('readyState' in C ? C.readyState : 0);
             if(mode === 'load' || readyState > 2){
                 var ct;
                 try{ct = C.contentType || C.getResponseHeader('Content-Type') || '';}
