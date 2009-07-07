@@ -31,6 +31,7 @@
    Donations are welcomed: http://donate.theactivegroup.com
 
   */
+  
 
    if(typeof Ext == undefined || !Ext.hasBasex)
       {throw "Ext and ext-basex 3.1 or higher required.";}
@@ -68,7 +69,7 @@
                             cb.defer(4);
                         }
                     }.createDelegate(ndom);
-                }else if( Ext.isEventSupported ('load', node)){
+                }else if( Ext.capabilities.isEventSupported ('load', node)){
                     node.on("load", cb);
                 }else {
                     cb.defer(50);
