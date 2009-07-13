@@ -336,7 +336,7 @@
         cacheResponses : false,
 
         /**
-         * @cfg {Integer} onAvailable/load method timeout value in
+         * @cfg {Integer} default onAvailable/load method timeout value in
          *      milliseconds
          */
 
@@ -1085,11 +1085,11 @@
                         //chain dependencies
                         module.substr(0,1)=="@" ?
                             c.call(this, module ):
-                               map.none || (result = result.concat(module));
+                              (result = result.concat(module));
 
                     },this);
 
-                if(!map.none && moduleName ){result = result.concat((map.path||'') + moduleName.replace("@","")); }
+                if(moduleName && !(map.none || map.virtual)){result = result.concat((map.path||'') + moduleName.replace("@","")); }
             },this);
 
             return Ext.applyIf({module:!!result.length ? result.unique() :null},options);
@@ -1266,6 +1266,12 @@
                           },
             execScript  : L.globalEval.createDelegate(L),
             lastError   : function(){return L.lastError;},
+            
+            /**
+             * @param {Integer} set/change the default onAvailable/load method timeout value in
+             *      milliseconds
+             */
+            setTimeout  : function(tmo){ L.timeout = parseInt(tmo||0,10);},
             applyStyle  : L.applyStyle.createDelegate(L),
             removeStyle  : L.removeStyle.createDelegate(L),
 
