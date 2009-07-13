@@ -1,7 +1,7 @@
  /* global Ext */
 
  /**
-    jit.js 1.1
+    jit.js 1.2
   ************************************************************************************
 
    $JIT [Dynamic Resource loader (basex 3.1+ support required)]
