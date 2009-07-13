@@ -1097,45 +1097,38 @@
     /**
      * private -- <script and link> tag support
      */
-    var domNode = function(tag, attributes, callback, context, deferred) {
+     var domNode = function(tag, attributes, callback, context, deferred) {
         attributes = Ext.apply({}, attributes || {});
         context || (context = window);
 
         var node = null, doc = context.document,
             head = doc.getElementsByTagName("head")[0];
 
-        if (doc && head && (node = doc.createElement(tag))) {
-            forEach(attributes, function(value, attrib) {
-                value && (attrib in node) && node.setAttribute(attrib, value);
+        if (doc && head && (node = Ext.get(doc.createElement(tag)))) {
+            var ndom = Ext.getDom(node);
+            ndom && forEach(attributes, function(value, attrib) {
+                value && (attrib in ndom) && ndom.setAttribute(attrib, value);
             });
 
-            if (callback) {
+            if (callback && node) {
                 var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback], 0);
+                
                 if (Ext.isIE) {
-                    node.onreadystatechange = node.onload = function() {
+                    ndom.onreadystatechange = ndom.onload = function() {
                         if(/loaded|complete|4/i.test(String(this.readyState))){
                             this.onreadystatechange = this.onload = emptyFn;
                             cb.defer(4);
                         }
-                    }.createDelegate(node);
-                } else if (Ext.isSafari3 && tag == 'script') {
-                    // has DOM2 support
-                    node.addEventListener("load", cb);
-                } else if (Ext.isSafari) {
+                    }.createDelegate(ndom);
+                }else if( Ext.capabilities.isEventSupported ('load', node)){
+                    node.on("load", cb);
+                }else {
                     cb.defer(50);
-                } else {
-                    /*
-                     * Gecko/Safari has no event support for link tag so just
-                     * defer the callback 50ms (optimistic)
-                     */
-                    tag !== 'link' || Ext.isOpera ? Ext.get(node).on('load', cb) : cb.defer(50);
                 }
-
             }
-            !deferred && head.appendChild(node);
+            !deferred && head.appendChild(ndom);
         }
-        return node;
-
+        return ndom;
     };
     
     if (Ext.util.Observable) {
