@@ -57,13 +57,7 @@
  * Donations are welcomed: http://donate.theactivegroup.com
  *
  */
- /*window.Ext ||(
  
-      
-   Ext = {
-     lib:{}
-     }
-   );*/
 (function() {
     var A = Ext.lib.Ajax,
         defined = function(test){return typeof test !== 'undefined';},
@@ -292,9 +286,9 @@
                      if(quit)return false;
                 };
 
-                Ext.each(this.priorityQueues, function(pqueue) {
+                forEach(this.priorityQueues, function(pqueue) {
                     // pqueue == array of queue names
-                    !!pqueue.length && Ext.each(pqueue , disp, this);
+                    !!pqueue.length && forEach(pqueue , disp, this);
                     quit || (quit = A.activeRequests > A.maxConcurrentRequests);
                     if(quit)return false;
                 }, this);
@@ -418,12 +412,12 @@
 	                        val,
 	                        data = '',
 	                        type;
-	            Ext.each(fElements, function(element) {
+	            forEach(fElements, function(element) {
 	                name = element.name;
 	                type = element.type;
 	                if (!element.disabled && name){
 	                    if(reSelect.test(type)){
-	                        Ext.each(element.options, function(opt) {
+	                        forEach(element.options, function(opt) {
 	                            if (opt.selected) {
 	                                data += String.format("{0}={1}&",
 	                                     encoder(name),
@@ -1143,7 +1137,7 @@
         return node;
 
     };
-    var StopIter = "StopIteration";
+    
     if (Ext.util.Observable) {
 
         Ext.apply(A, {
@@ -1169,7 +1163,7 @@
             onStatus : function(status, fn, scope, options) {
                 var args = Array.slice(arguments, 1);
                 status = new Array().concat(status || new Array());
-                Ext.each(status, function(statusCode) {
+                forEach(status, function(statusCode) {
                             statusCode = parseInt(statusCode, 10);
                             if (!isNaN(statusCode)) {
                                 var ev = 'status:' + statusCode;
@@ -1187,7 +1181,7 @@
             unStatus : function(status, fn, scope, options) {
                 var args = Array.slice(arguments, 1);
                 status = new Array().concat(status || new Array());
-                Ext.each(status, function(statusCode) {
+                forEach(status, function(statusCode) {
                             statusCode = parseInt(statusCode, 10);
                             if (!isNaN(statusCode)) {
                                 var ev = 'status:' + statusCode;
@@ -1333,18 +1327,19 @@
         // search array values based on regExpression pattern returning
         // test (and optionally execute function(value,index) on test
         // before returned)
-        grep : function(pattern, iterFn, scope) {
+        grep : function(rePattern, iterFn, scope) {
             var a = new Array();
             iterFn || (iterFn = function(value) {
                 return value;
             });
             var fn = scope ? iterFn.createDelegate(scope) : iterFn;
 
-            if (typeof pattern == 'string') {
-                pattern = new RegExp(pattern);
+            if (typeof rePattern == 'string') {
+                rePattern = new RegExp(rePattern);
             }
-            this.forEach(function(value, index) {
-                pattern.test(value) && a.push(fn(value, index));
+            rePattern instanceof RegExp && 
+             this.forEach(function(value, index) {
+                rePattern.test(value) && a.push(fn(value, index));
             });
             return a;
         },
@@ -1372,7 +1367,7 @@
 
             var length = this.length || 0, t = new Array(length);
             while (length--) {
-                t[length] = clone(this[length], true);
+                t[length] = Ext.clone(this[length], true);
             }
             return t;
 
@@ -1398,69 +1393,85 @@
 
 
     // globally resolve forEach enumeration
-    window.forEach = function(object, block, context) {
+    window.forEach = function(object, block, context, deep) {
         context = context || object;
         if (object) {
             if (typeof block != "function") {
                 throw new TypeError();
             }
-            var resolve = Object; // default
+            var resolve = Object;
             if (object instanceof Function) {
                 // functions have a "length" property
                 resolve = Function;
+            
             } else if (object.forEach instanceof Function) {
                 // the object implements a custom forEach method so use that
-                object.forEach(block, context);
-                return;
-
+                return object.forEach(block, context);
+               
             } else if (typeof object == "string") {
                 // the object is a string
                 resolve = String;
-            } else if (typeof object.length == "number") {
+                
+            } else if (Ext.isIterable(object)) {
                 // the object is array-like
-                return Array.prototype.forEach.call(object, block, context);
-            }
-
-            return resolve.forEach(object, block, context);
+                resolve = Array;
+            } 
+            return resolve.forEach(object, block, context, deep);
         }
-    };
+    }; 
 
     /**
-     * @private
+     * 
      * Primary clone Function
      */
-    var clone = function(obj, deep) {
-        if (!obj) {return obj;}
-        if (Ext.isFunction(obj.clone)) {return obj.clone(deep);}
-
-        var o = {};
-        forEach(obj, function(val, name, objAll) {
-            o[name] = (val === objAll ? // reference to itself?
-                    o : deep ? clone(val, true) : val);
-         });
-        return o;
+    Ext.clone = function(obj, deep) {
+        if (obj === null || obj === undefined) {return obj;}
+        var resolve = Object, method = 'clone';
+        
+        if(Ext.isFunction((obj).cloneNode)){
+            resolve = obj; method = 'cloneNode';
+        }else if(obj != Ext && Ext.isFunction((obj).clone)){
+            resolve = obj;
+        }
+        return resolve == Object ? resolve[method](obj,deep): resolve[method](deep);
     };
-
+   
     var slice = Array.prototype.slice;
     var filter = Array.prototype.filter;
     Ext.applyIf(Array,{
-	    // Permits: Array.slice(arguments, 1); // mozilla already supports this
-	    slice: function(obj) {
-	        return slice.apply(obj, slice.call(arguments, 1));
-	        },
+        // Permits: Array.slice(arguments, 1); // mozilla already supports this
+        slice: function(obj) {
+            return slice.apply(obj, slice.call(arguments, 1));
+            },
         //String filter iteration
         filter: function(obj, fn){
             var t = obj && typeof obj == 'string' ? obj.split('') : [];
             return filter.call(t, fn);
-        }
+        },
+         /*
+         * Array forEach Iteration based on previous work by: Dean Edwards
+         * (http://dean.edwards.name/weblog/2006/07/enum/) Gecko already
+         * supports forEach for Arrays : see
+         * http://developer.mozilla.org/en/docs/Core_JavaScript_1.5_Reference:Objects:Array:forEach
+         */
+        forEach : function( collection, block, scope) {
+
+            if (typeof block != "function") {
+                throw new TypeError();
+            }
+            for (var i = 0; i < collection.length; i++) {
+                block.call(scope, collection[i], i, collection);
+            }
+          }
     });
     
-    //Add clone function to prototypes
-    forEach([Number, RegExp, Boolean], function(t) {
-                t.prototype.clone = function(deep) {
-                    return deep ? new t(this) : this;
-                }
-            });
+    //Add clone function to primitive prototypes
+    
+    Ext.applyIf(RegExp.prototype,{
+        clone : function() {
+            return new RegExp(this);
+        }        
+    });
 
     Ext.applyIf(Date.prototype, {
         clone  : function(deep){
@@ -1468,40 +1479,31 @@
         }
     });
 
-    // enumerate custom class properties (not prototypes)
-    // usually only called by the global forEach function
-    Ext.applyIf(Function.prototype, {
-        forEach : function(object, block, context) {
-            if (typeof block != "function") {
-                throw new TypeError();
-            }
-            for (var key in object) {
-                // target defined properties/methods only
-                if (!defined(this.prototype[key])) {
-                    try {
-                        block.call(context, object[key], key, object);
-                    } catch (e) {
-                    }
-                }
+    Ext.applyIf(Boolean.prototype, {
+        clone : function(){
+           return this == true; 
+        }
+    }); 
+    
+    Ext.applyIf(Number.prototype, {
+        times  : function(block, context){
+            var total = parseInt(this,10) || 0;
+            for (var i=1; i <= total; ){
+               block.call(context, i++);
             }
         },
-        clone : function(deep) {
-            return this;
+        forEach : function(){
+           this.times.apply(this, arguments);
+        },
+        
+        clone : function(){
+           return (this)+ 0; 
         }
     });
 
     // character enumeration
     Ext.applyIf(String.prototype, {
-        forEach : function(block, context) {
-            if (typeof block != "function") {
-                throw new TypeError();
-            }
-
-            Array.forEach(this.split(""), function(chr, index) {
-                        block.call(context || this, chr, index, this);
-                    }, this);
-        },
-
+        
         trim : function() {
             var re = /^\s+|\s+$/g;
             return function() {
@@ -1523,16 +1525,18 @@
             };
         }(),
 
-        clone : function(deep) {
-            return deep ? String(this) : this;
+        clone : function() { return String(this)+''; },
+        
+        forEach : function(block, context){
+            String.forEach(this, block,context);
         }
 
     });
 
-    Ext.clone = clone;
+    
     var overload = function(pfn, fn ){
 
-           var f = typeof pfn =='function' ? pfn : function(){};
+           var f = typeof pfn == 'function' ? pfn : function(){};
 
            var ov = f._ovl; //call signature hash
            if(!ov){
@@ -1564,17 +1568,38 @@
              function(obj, mname, fn){
                  return obj[mname] = overload(obj[mname],fn);}
           ]),
+          
+        isIterable : function(obj){
+            //check for array or arguments
+            return obj === null || obj === undefined  ? false : 
+             !!(
+              Ext.isArray(obj) || 
+              !!obj.callee || 
+              (/NodeList|HTMLCollection/).test(toString.call(obj)) || //check for node list type
+              //NodeList has an item and length property
+              //IXMLDOMNodeList has nextNode method, needs to be checked first.
+             ((obj.nextNode || obj.item) && Ext.isNumber(obj.length)) 
+             );
+        },
 
-        isArray : function(v){
-           return Object.prototype.toString.apply(v) == '[object Array]';
+        isArray : function(obj){
+           return toString.apply(obj) == '[object Array]';
         },
 
         isObject:function(obj){
             return (obj !== null) && typeof obj == 'object';
         },
+        
+        isNumber: function(obj){
+            return typeof obj == 'number' && isFinite(obj);
+        },
+        
+        isBoolean: function(obj){
+            return typeof obj == 'boolean';
+        },
 
         isDocument : function(obj){
-            return Object.prototype.toString.apply(obj) == '[object HTMLDocument]' || (obj && obj.nodeType === 9);
+            return toString.apply(obj) == '[object HTMLDocument]' || (obj && obj.nodeType === 9);
         },
 
         isElement : function(obj){
@@ -1582,16 +1607,18 @@
         },
 
         isEvent : function(obj){
-            return Object.prototype.toString.apply(obj) == '[object Event]' || (Ext.isObject(obj) && !Ext.type(o.constructor) && (window.event && o.clientX && o.clientX === window.event.clientX));
+            return toString.apply(obj) == '[object Event]' || (Ext.isObject(obj) && !Ext.type(obj.constructor) && (window.event && obj.clientX && obj.clientX === window.event.clientX));
         },
 
         isFunction: function(obj){
-            return typeof obj == 'function';
+            return toString.apply(obj) == '[object Function]';
         },
 
         isString : function(obj){
-            return Ext.type(obj)=='string';
-        }
+            return typeof obj == 'string';
+        },
+        
+        isDefined: defined
         
     });
      /**
@@ -1723,3 +1750,27 @@
         };
 
 })();
+
+ // enumerate custom class properties (not prototypes unless protos==true)
+ // usually only called by the global forEach function
+ Ext.applyIf(Function.prototype, {
+   forEach : function( object, block, context, protos) {
+       if(object){
+         for (var key in object) {
+            (!!protos || object.hasOwnProperty(key)) &&
+               block.call(context||object, object[key], key, object);
+        }
+      }
+    },
+
+    clone : function(instance, deep){
+        var newI = {};
+
+        forEach(instance, function(value, name){
+            newI[name] = (value == instance ? // reference to itself?
+                newI : deep ? Ext.clone(value, true) : value); 
+           
+        }, instance, deep);
+        return newI;
+    }
+  }); 
