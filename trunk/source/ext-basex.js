@@ -61,7 +61,8 @@
 (function() {
     var A = Ext.lib.Ajax,
         defined = function(test){return typeof test !== 'undefined';},
-        emptyFn = Ext.emptyFn || function(){};
+        emptyFn = Ext.emptyFn || function(){},
+        OP = Object.prototype;
 
     Ext.lib.Ajax.Queue = function(config) {
 
@@ -1097,7 +1098,7 @@
     /**
      * private -- <script and link> tag support
      */
-     var domNode = function(tag, attributes, callback, context, deferred) {
+      var domNode = function(tag, attributes, callback, context, deferred) {
         attributes = Ext.apply({}, attributes || {});
         context || (context = window);
 
@@ -1106,25 +1107,16 @@
 
         if (doc && head && (node = Ext.get(doc.createElement(tag)))) {
             var ndom = Ext.getDom(node);
+            
             ndom && forEach(attributes, function(value, attrib) {
                 value && (attrib in ndom) && ndom.setAttribute(attrib, value);
             });
 
             if (callback && node) {
                 var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback], 0);
-                
-                if (Ext.isIE) {
-                    ndom.onreadystatechange = ndom.onload = function() {
-                        if(/loaded|complete|4/i.test(String(this.readyState))){
-                            this.onreadystatechange = this.onload = emptyFn;
-                            cb.defer(4);
-                        }
-                    }.createDelegate(ndom);
-                }else if( Ext.capabilities.isEventSupported ('load', node)){
-                    node.on("load", cb);
-                }else {
-                    cb.defer(50);
-                }
+                Ext.capabilities.isEventSupported('load', tag) ?  
+                    node.on("load", cb, null, {single:true}) : 
+                        cb.defer(50);
             }
             !deferred && head.appendChild(ndom);
         }
@@ -1553,7 +1545,7 @@
 
        };
 
-
+    
     Ext.applyIf(Ext,{
         overload : overload( overload,
            [
@@ -1564,19 +1556,17 @@
           
         isIterable : function(obj){
             //check for array or arguments
-            return obj === null || obj === undefined  ? false : 
-             !!(
-              Ext.isArray(obj) || 
-              !!obj.callee || 
-              (/NodeList|HTMLCollection/).test(toString.call(obj)) || //check for node list type
+            if( obj === null || obj === undefined )return false; 
+            if(Ext.isArray(obj) || !!obj.callee || Ext.isNumber(obj.length) ) return true;
+            
+            return !!((/NodeList|HTMLCollection/i).test(OP.toString.call(obj)) || //check for node list type
               //NodeList has an item and length property
               //IXMLDOMNodeList has nextNode method, needs to be checked first.
-             ((obj.nextNode || obj.item) && Ext.isNumber(obj.length)) 
-             );
+             obj.nextNode || obj.item || false); 
         },
 
         isArray : function(obj){
-           return toString.apply(obj) == '[object Array]';
+           return OP.toString.apply(obj) == '[object Array]';
         },
 
         isObject:function(obj){
@@ -1592,7 +1582,7 @@
         },
 
         isDocument : function(obj){
-            return toString.apply(obj) == '[object HTMLDocument]' || (obj && obj.nodeType === 9);
+            return OP.toString.apply(obj) == '[object HTMLDocument]' || (obj && obj.nodeType === 9);
         },
 
         isElement : function(obj){
@@ -1600,11 +1590,11 @@
         },
 
         isEvent : function(obj){
-            return toString.apply(obj) == '[object Event]' || (Ext.isObject(obj) && !Ext.type(obj.constructor) && (window.event && obj.clientX && obj.clientX === window.event.clientX));
+            return OP.toString.apply(obj) == '[object Event]' || (Ext.isObject(obj) && !Ext.type(obj.constructor) && (window.event && obj.clientX && obj.clientX === window.event.clientX));
         },
 
         isFunction: function(obj){
-            return toString.apply(obj) == '[object Function]';
+            return OP.toString.apply(obj) == '[object Function]';
         },
 
         isString : function(obj){
@@ -1722,13 +1712,14 @@
 	                //Use a previously cached result if available
 	                return cache[key];
 	              }
-	              var el, isSupported = window.Event ? String(evName).toUpperCase() in window.Event: false;
-	
-	              if(!isSupported){
-	                var eventName = 'on' + evName;
-	                el = Ext.getDom(testEl) || document.createElement(TAGNAMES[eventName] || 'div');
-	                isSupported = (el && (eventName in el));
-	              }
+	              var el, isSupported = false;
+	              var eventName = 'on' + evName;
+	              var tag = Ext.isString(testEl) ? testEl : TAGNAMES[eventName] || 'div';
+	              el = Ext.isString(tag) ? document.createElement(tag): testEl;
+	              isSupported = (!!el && (eventName in el));
+	              
+	              isSupported || (isSupported = !!(String(evName).toUpperCase() in window.Event));
+                  
 	              if (!isSupported && el) {
 	                el.setAttribute && el.setAttribute(eventName, 'return;');
 	                isSupported = Ext.isFunction(el[eventName]);
