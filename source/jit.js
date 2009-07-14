@@ -61,19 +61,9 @@
 
             if (callback && node) {
                 var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback], 0);
-                
-                if (Ext.isIE) {
-                    ndom.onreadystatechange = ndom.onload = function() {
-                        if(/loaded|complete|4/i.test(String(this.readyState))){
-                            this.onreadystatechange = this.onload = emptyFn;
-                            cb.defer(4);
-                        }
-                    }.createDelegate(ndom);
-                }else if( Ext.capabilities.isEventSupported ('load', node)){
-                    node.on("load", cb);
-                }else {
-                    cb.defer(50);
-                }
+                Ext.capabilities.isEventSupported('load', tag) ?  
+                    node.on("load", cb, null, {single:true}) : 
+                        cb.defer(50);
             }
             !deferred && head.appendChild(ndom);
         }
@@ -491,7 +481,7 @@
          */
 
         provides : function() {
-            Array.prototype.forEach.call(arguments, function(module) {
+            forEach(arguments, function(module) {
 
                         var moduleObj = this.createModule(module, false);
                         moduleObj.loaded || //already loaded ?
@@ -531,6 +521,7 @@
                 task.start();
 
             } catch (ex) {
+                
                 if (ex != StopIter) {
 
                     if (task) {
@@ -1306,14 +1297,14 @@
     $JIT.provide('jit','ext-basex');
 
     $JIT.on('loadexception',function(ecode,title){
-      if(!ecode)return;
 
+        if(!ecode)return;
       ecode = ecode.error || ecode;
       var msg = ecode? ecode.message || ecode.description || ecode.name || ecode: null;
 
       if(msg){
           if(Ext.MessageBox){
-              Ext.MessageBox.alert(title,msg);
+              Ext.MessageBox.alert(title||'unknown',msg);
           } else {
               alert((title?title+'\n':'')+msg );
           }
