@@ -797,7 +797,7 @@
                                 var doc = (f.target || window).document,
                                 head = doc.getElementsByTagName("head")[0];
                                 if (head && this.el) {
-                                    head.appendChild(this.el);
+                                    head.appendChild(this.el.dom);
                                 }
                             },
                             abort : function() {
@@ -810,7 +810,8 @@
                             readyState : 0,
                             status : 0,
                             responseText : null,
-                            responseXML : null
+                            responseXML : null,
+                            responseJSON : null
                         },
                         debug : f.debug,
                         params : options.params || {},
@@ -820,7 +821,7 @@
 
                     window[o.cbName] = o.cb = function(content, request) {
 
-                        if (content && typeof content == 'object') {
+                        if (content && Ext.isObject(content)) {
                             this.responseJSON = content;
                             this.responseText = Ext.encode(content);
                         } else {
@@ -834,19 +835,14 @@
                         // cleanup must be deferred on IE until after the
                         // callback completes
                         (function() {
-                            this.el.onload = (this.el.onreadystatechange = emptyFn);
+                            this.el.dom.onload = (this.el.dom.onreadystatechange = emptyFn);
                             window[request.cbName] = undefined;
                             try {
                                 delete window[request.cbName];
                             } catch (ex) {
                             }
 
-                            if (!request.debug) {
-                                var p = this.el.parentElement || this.el.parentNode;
-                                p && p.removeChild(this.el);
-                                p = null;
-                            }
-
+                            request.debug || this.el.remove();
                             this.el = null;
                         }).defer(100, this);
 
@@ -860,7 +856,7 @@
 
                         var params = Ext.urlEncode(o.params) || null;
 
-                        this.el = domNode(f.tag || 'script', {
+                        this.el = monitoredNode(f.tag || 'script', {
                                     type : "text/javascript",
                                     src : params ? uri
                                             + (uri.indexOf("?") != -1
@@ -868,7 +864,10 @@
                                                     : "?") + params : uri,
                                     charset : f.charset || options.charset
                                             || null
-                                }, null, f.target, true);
+                                },
+                                null, 
+                                f.target, 
+                                true); //defer head insertion until send method
 
                     };
 
@@ -1098,7 +1097,7 @@
     /**
      * private -- <script and link> tag support
      */
-      var domNode = function(tag, attributes, callback, context, deferred) {
+      var monitoredNode = function(tag, attributes, callback, context, deferred) {
         attributes = Ext.apply({}, attributes || {});
         context || (context = window);
 
@@ -1114,13 +1113,14 @@
 
             if (callback && node) {
                 var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback], 0);
-                Ext.capabilities.isEventSupported('load', tag) ?  
+                Ext.capabilities.isEventSupported('load', node) ?  
                     node.on("load", cb, null, {single:true}) : 
                         cb.defer(50);
             }
-            !deferred && head.appendChild(ndom);
+            deferred || head.appendChild(ndom);
         }
-        return ndom;
+        console.log(node);
+        return node;
     };
     
     if (Ext.util.Observable) {
@@ -1397,7 +1397,7 @@
                 // the object is a string
                 resolve = String;
                 
-            } else if (Ext.isIterable(object)) {
+            } else if (Ext.isNumber(object.length)) {
                 // the object is array-like
                 resolve = Array;
             } 
@@ -1411,14 +1411,19 @@
      */
     Ext.clone = function(obj, deep) {
         if (obj === null || obj === undefined) {return obj;}
-        var resolve = Object, method = 'clone';
         
-        if(Ext.isFunction((obj).cloneNode)){
-            resolve = obj; method = 'cloneNode';
-        }else if(obj != Ext && Ext.isFunction((obj).clone)){
-            resolve = obj;
+        if (Ext.isFunction(obj.clone)) { 
+            return obj.clone(deep);
         }
-        return resolve == Object ? resolve[method](obj,deep): resolve[method](deep);
+        else if(Ext.isFunction(obj.cloneNode)){
+            return obj.cloneNode(deep);
+        }
+        var o={};
+        forEach(obj, function(value, name, objAll){
+            o[name] = (value === objAll ? // reference to itself?
+                o : deep ? Ext.clone(value, true) : value); 
+        }, obj, deep);
+        return o;
     };
    
     var slice = Array.prototype.slice;
@@ -1684,7 +1689,7 @@
             /**
 	         * Determine whether a specified DOMEvent is supported by a given HTMLElement or Object.
 	         * @param {String} type The eventName (without the 'on' prefix)
-	         * @param {HTMLElement/Object} testEl (optional) A specific element to test against, otherwise a mapping
+	         * @param {HTMLElement/Object/String} testEl (optional) A specific HTMLElement/Object to test against, otherwise a tagName to test against.
 	         * based on the passed eventName is used, or DIV as default. 
 	         * @return {Boolean} True if the passed object supports the named event. 
 	         */  
@@ -1693,39 +1698,43 @@
 	              'select':'input','change':'input',
 	              'submit':'form','reset':'form',
 	              'error':'img','load':'img','abort':'img'
-	            };
+	            },
 	            //Cached results
-	            var cache = {};
-	            //Get a tokenized string unique to the node and event type
-	            var getKey = function(type, el){
-	                return (el =Ext.getDom(el) ?
-	                           (Ext.isElement(el) || Ext.isDocument(el) ?
-	                                el.nodeName.toLowerCase() :
-	                                    el.id || Ext.type(el))
-	                       : 'div') + ':' + type;
+	            cache = {},
+	            //Get a tokenized string of the form nodeName:type
+	            getKey = function(type, el){
+                    
+                    var tEl = Ext.getDom(el);
+                    
+	                return (tEl ?
+	                           (Ext.isElement(tEl) || Ext.isDocument(tEl) ?
+	                                tEl.nodeName.toLowerCase() :
+	                                    el.self ? '#window' : el || '#object')
+	                       : el || 'div') + ':' + type;
 	            };
 	
 	            return function (evName, testEl) {
-	
-	              var key = getKey(evName, testEl);
+                  var el, isSupported = false;
+                  var eventName = 'on' + evName;
+                  var tag = (testEl ? testEl : TAGNAMES[evName]) || 'div';
+	              var key = getKey(evName, tag);
+                  
 	              if(key in cache){
 	                //Use a previously cached result if available
 	                return cache[key];
 	              }
-	              var el, isSupported = false;
-	              var eventName = 'on' + evName;
-	              var tag = Ext.isString(testEl) ? testEl : TAGNAMES[eventName] || 'div';
+	              
 	              el = Ext.isString(tag) ? document.createElement(tag): testEl;
 	              isSupported = (!!el && (eventName in el));
 	              
-	              isSupported || (isSupported = !!(String(evName).toUpperCase() in window.Event));
+	              isSupported || (isSupported = window.Event && !!(String(evName).toUpperCase() in window.Event));
                   
 	              if (!isSupported && el) {
 	                el.setAttribute && el.setAttribute(eventName, 'return;');
 	                isSupported = Ext.isFunction(el[eventName]);
 	              }
 	              //save the cached result for future tests
-	              cache[getKey(evName, el)] = isSupported;
+	              cache[key] = isSupported;
 	              el = null;
 	              return isSupported;
 	            };
@@ -1740,21 +1749,13 @@
  Ext.applyIf(Function.prototype, {
    forEach : function( object, block, context, protos) {
        if(object){
-         for (var key in object) {
+        var key;
+         for (key in object) {
             (!!protos || object.hasOwnProperty(key)) &&
                block.call(context||object, object[key], key, object);
         }
       }
     },
 
-    clone : function(instance, deep){
-        var newI = {};
-
-        forEach(instance, function(value, name){
-            newI[name] = (value == instance ? // reference to itself?
-                newI : deep ? Ext.clone(value, true) : value); 
-           
-        }, instance, deep);
-        return newI;
-    }
+    clone : function(deep){ return this;}
   }); 

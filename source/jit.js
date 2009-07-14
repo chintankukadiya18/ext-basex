@@ -61,7 +61,7 @@
 
             if (callback && node) {
                 var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback], 0);
-                Ext.capabilities.isEventSupported('load', tag) ?  
+                Ext.capabilities.isEventSupported('load', node) ?  
                     node.on("load", cb, null, {single:true}) : 
                         cb.defer(50);
             }
@@ -1296,12 +1296,12 @@
 
     $JIT.provide('jit','ext-basex');
 
-    $JIT.on('loadexception',function(ecode,title){
+    $JIT.on('loadexception',function(loader, module , ecode, title){
 
-        if(!ecode)return;
-      ecode = ecode.error || ecode;
-      var msg = ecode? ecode.message || ecode.description || ecode.name || ecode: null;
-
+      if(!ecode)return;
+      var ec = ecode.error || ecode;
+      var msg = ec? ec.message || ec.description || ec.name || ecode: null;
+      //forEach(ecode,function(v, n){console.log(n, ":",  v); });
       if(msg){
           if(Ext.MessageBox){
               Ext.MessageBox.alert(title||'unknown',msg);
