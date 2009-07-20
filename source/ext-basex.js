@@ -585,7 +585,7 @@
 
             if (isAbort !== true) {
                 try { // to catch bad encoding problems here
-                    
+                    obj.responseJSON = o.conn.responseJSON || null;
                     obj.responseStream = o.conn.responseStream || null;
                     obj.contentType = o.conn.contentType || null;
                     obj.responseText = o.conn.responseText;
@@ -658,9 +658,11 @@
 
                 if (o.options.isJSON || (this.reCtypeJSON && this.reCtypeJSON.test(headerObj['content-type'] || ""))) {
                     try {
-                        obj.responseJSON = Ext.isFunction( this.decodeJSON )
+                        obj.responseJSON || 
+                            (obj.responseJSON = Ext.isFunction( this.decodeJSON ) && 
+                               Ext.isString(obj.responseText)
                                 ? this.decodeJSON(obj.responseText)
-                                : null;
+                                : null);
                     } catch (exJSON) {
                         o.status.isError = true; // trigger future exception
                                                     // callback
@@ -803,10 +805,11 @@
                             abort : function() {
                                 this.readyState = 0;
                             },
-                            setRequestHeader : emptyFn,
+                            
                             getAllResponseHeaders : emptyFn,
                             getResponseHeader : emptyFn,
                             onreadystatechange : null,
+                            onload : null,
                             readyState : 0,
                             status : 0,
                             responseText : null,
@@ -821,31 +824,24 @@
 
                     window[o.cbName] = o.cb = function(content, request) {
 
-                        if (content && Ext.isObject(content)) {
-                            this.responseJSON = content;
-                            this.responseText = Ext.encode(content);
-                        } else {
-                            this.responseText = content || null;
-                        }
+                        content && typeof(content)=='object' && (this.responseJSON = content);
+                        this.responseText = content || null;
 
                         this.readyState = 4;
                         this.status = !!content ? 200 : 404;
+                        
                         Ext.isFunction(this.onreadystatechange) && this.onreadystatechange();
+                        window[o.cbName] = undefined;
+                        try {
+                            delete window[o.cbName];
+                        } catch (ex) {}
 
-                        // cleanup must be deferred on IE until after the
-                        // callback completes
-                        (function() {
-                            this.el.dom.onload = (this.el.dom.onreadystatechange = emptyFn);
-                            window[request.cbName] = undefined;
-                            try {
-                                delete window[request.cbName];
-                            } catch (ex) {
-                            }
-
-                            request.debug || this.el.remove();
-                            this.el = null;
-                        }).defer(100, this);
-
+                        o.debug || this.el.remove();
+                        this.el = null;
+                        
+                        Ext.isFunction(this.onload) && this.onload();
+                        
+                        
                     }.createDelegate(o.conn, [o], true);
 
                     o.conn.open = function() {
@@ -859,22 +855,22 @@
                         this.el = monitoredNode(f.tag || 'script', {
                                     type : "text/javascript",
                                     src : params ? uri
-                                            + (uri.indexOf("?") != -1
+                                            + (uri.indexOf("?") > -1
                                                     ? "&"
                                                     : "?") + params : uri,
                                     charset : f.charset || options.charset
                                             || null
                                 },
-                                null, 
+                                null,
                                 f.target, 
                                 true); //defer head insertion until send method
+                                
+                        this.readyState = 1; // show CallInProgress
+                        Ext.isFunction(this.onreadystatechange) && this.onreadystatechange();
 
                     };
-
-                    o.conn.readyState = 1; // show CallInProgress
-                    Ext.isFunction(o.conn.onreadystatechange) && o.conn.onreadystatechange();
                     options.async = true; // force timeout support
-
+                    
                 } else {
                     o = this.createXhrObject(tId, options);
                 }
@@ -1012,6 +1008,7 @@
          * General readyStateChange multiPart handler 
          */
         onStateChange : function(o, callback, mode) {
+            
             if(!o.conn){ return; }
             
             var C = o.conn, readyState = ('readyState' in C ? C.readyState : 0);
@@ -1063,7 +1060,7 @@
         setHeaders:function(o){
 
             //Some XDomain implementations (IE8) do not support setting headers
-            if('setRequestHeader' in o.conn){
+            if(o.conn && 'setRequestHeader' in o.conn){
 	            this.defaultHeaders &&
 		            forEach(this.defaultHeaders, function(value, key){ o.conn.setRequestHeader(key, value);});
 	
@@ -1111,15 +1108,13 @@
                 value && (attrib in ndom) && ndom.setAttribute(attrib, value);
             });
 
-            if (callback && node) {
-                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback], 0);
-                Ext.capabilities.isEventSupported('load', node) ?  
-                    node.on("load", cb, null, {single:true}) : 
-                        cb.defer(50);
+            if (callback) {
+                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback], true);
+                Ext.capabilities.isEventSupported('load', tag) ? node.on("load", cb) : cb.defer(50);
             }
             deferred || head.appendChild(ndom);
         }
-        console.log(node);
+        
         return node;
     };
     
