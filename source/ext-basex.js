@@ -1,6 +1,6 @@
 /* global Ext */
 /*
- * ext-basex 3.5
+ * ext-basex 3.5.1
  * ***********************************************************************************
  *
  * Ext.lib.Ajax enhancements:
@@ -60,7 +60,7 @@
  
 (function() {
     var A = Ext.lib.Ajax,
-        defined = function(test){return typeof test !== 'undefined';},
+        defined = function(test){return typeof test != 'undefined';},
         emptyFn = Ext.emptyFn || function(){},
         OP = Object.prototype;
 
@@ -383,7 +383,7 @@
 
         },
                 
-        createExceptionObject: function (tId, callbackArg, isAbort, isTimeout) {          
+        createExceptionObject: function (tId, callbackArg, isAbort, isTimeout, errObj) {          
             return {
                 tId        : tId,
                 status     : isAbort ? -1 : 0,
@@ -495,7 +495,7 @@
              */
             o.status.isError && (responseObject = Ext.apply({}, responseObject || {},
                         this.createExceptionObject(o.tId, callback.argument,
-                          (isAbort? isAbort: false), isTimeout)));
+                          (isAbort? isAbort: false), isTimeout, o.status.error)));
 
             responseObject.options = o.options;
             responseObject.fullStatus = o.status;
@@ -519,7 +519,7 @@
                 } else {
                     if (!this.events
                             || this.fireEvent('exception', o, responseObject,
-                                    callback, isAbort, isTimeout) !== false) {
+                                    callback, isAbort, isTimeout, responseObject.fullStatus.error) !== false) {
                         Ext.isFunction(callback.failure) &&
                             callback.failure.call(callback.scope || null, responseObject, responseObject.fullStatus.error);
                         
@@ -600,15 +600,17 @@
                 }
 
                 try {
-                    headerStr = (defined(o.conn.getAllResponseHeaders) ? o.conn.getAllResponseHeaders() : null ) || '';
-                    var header = headerStr.split('\n'), s;
-	                for (var i = 0, hl = header.length; i < hl; i++) {
-                        s = header[i].split(':');
-                        s && s.first() && 
+                    headerStr = ('getAllResponseHeaders' in o.conn ? o.conn.getAllResponseHeaders() : null ) || '';
+                    var s;
+                    headerStr.split('\n').forEach( function(sHeader){
+                        (s = sHeader.split(':')) && s.first() && 
 	                        (headerObj[s.first().trim().toLowerCase()] = (s.last()||'').trim());
-	                                
-	                }
-                } catch (ex1) {}
+                    });
+	                
+                } catch (ex1) {
+                    o.status.isError = true; // trigger future exception callback
+                    o.status.error = ex1;
+                }
                 finally{ obj.contentType = obj.contentType || headerObj['content-type'] || ''; }
 
                 if ((o.status.isLocal || o.proxied)
@@ -632,8 +634,7 @@
                                 xdoc.loadXML(obj.responseText);
                             } else {
                                 var domParser = null;
-                                try { // Opera 9 will fail parsing non-XML
-                                        // content, so trap here.
+                                try { // Opera 9 will fail parsing non-XML content, so trap here.
                                     domParser = new DOMParser();
                                     xdoc = domParser.parseFromString(obj.responseText,'application\/xml');
                                 } catch (exP) {
@@ -658,14 +659,13 @@
 
                 if (o.options.isJSON || (this.reCtypeJSON && this.reCtypeJSON.test(headerObj['content-type'] || ""))) {
                     try {
-                        obj.responseJSON || 
+                        Ext.isObject(obj.responseJSON) || 
                             (obj.responseJSON = Ext.isFunction( this.decodeJSON ) && 
                                Ext.isString(obj.responseText)
                                 ? this.decodeJSON(obj.responseText)
                                 : null);
                     } catch (exJSON) {
-                        o.status.isError = true; // trigger future exception
-                                                    // callback
+                        o.status.isError = true; // trigger future exception callback
                         o.status.error = exJSON;
                     }
                 }
@@ -679,11 +679,11 @@
                         statusText : o.status.statusText,
                         contentType : obj.contentType || headerObj['content-type'],
                         getResponseHeader : function(header){return headerObj[(header||'').trim().toLowerCase()];},
-                        getAllResponseHeaders : function(){return headerStr},
+                        getAllResponseHeaders : function(){return headerStr;},
                         fullStatus : o.status,
                         isPart : o.isPart || false
                     });
-                    
+               
             o.parts && !o.isPart && (obj.parts = o.parts);
             defined(callbackArg) && (obj.argument = callbackArg);
             return obj;
@@ -891,12 +891,14 @@
             if (o = this.getConnectionObject(uri, options)) {
                 o.options = options;
                 var r = o.conn;
+                
                 try {
                     if(o.status.isError){ throw o.status.error };
-                    A.activeRequests++;
-                    r.open(method.toUpperCase(), uri, options.async,options.userId, options.password);
                     
-                    ('onreadystatechange' in r) &&
+                    A.activeRequests++;
+                    r.open(method.toUpperCase(), uri, options.async, options.userId, options.password);
+                   
+                    ('onreadystatechange' in r) && 
                         (r.onreadystatechange = this.onStateChange.createDelegate(this, [o, callback, 'readystate'], 0));
                     
                     ('onload' in r) &&
@@ -1352,6 +1354,7 @@
             return t;
 
         },
+        
          /*
          * Array forEach Iteration based on previous work by: Dean Edwards
          * (http://dean.edwards.name/weblog/2006/07/enum/) Gecko already
@@ -1359,15 +1362,8 @@
          * http://developer.mozilla.org/en/docs/Core_JavaScript_1.5_Reference:Objects:Array:forEach
          */
         forEach : function( block, scope) {
-
-            if (typeof block != "function") {
-                throw new TypeError();
-            }
-            var i = 0, length = this.length;
-            while (i < length) {
-                block.call(scope, this[i], i++, this);
-            }
-          }
+            Array.forEach(this, block, scope);
+        }            
 
     });
 
@@ -1444,7 +1440,7 @@
             if (typeof block != "function") {
                 throw new TypeError();
             }
-            for (var i = 0; i < collection.length; i++) {
+            for (var i = 0, l = collection.length; i < l; i++) {
                 block.call(scope, collection[i], i, collection);
             }
           }
