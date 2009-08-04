@@ -737,7 +737,7 @@
                 opt = response.argument.module, 
                 executable = (!opt.proxied && module.extension == "js" && !opt.noExecute && opt.method !== 'DOM'), 
                 cbArgs = null;
-            //console.log(module.name,opt, arguments);   
+            
             module = this.MM.getModule(module.name);
             this.currentModule = module.name;
 
