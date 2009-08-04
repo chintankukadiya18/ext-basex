@@ -1163,7 +1163,7 @@
 
             if (callback) {
                 var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback||{}], 0);
-                //Ext.capabilities.isEventSupported('load') ? node.on("load", cb) : cb.defer(800);
+                
                 Ext.isIE ? node.on('readystatechange', function(){
                     this.dom.readyState == 'loaded' && cb();    
                 }) : node.on("load", cb);
@@ -1746,7 +1746,7 @@
 	         * based on the passed eventName is used, or DIV as default. 
 	         * @return {Boolean} True if the passed object supports the named event. 
 	         */  
-	         isEventSupported : function(evName, testEl){
+	        isEventSupported : function(evName, testEl){
 	            var TAGNAMES = {
 	              'select':'input',
                   'change':'input',
@@ -1791,7 +1791,7 @@
 	                isSupported = Ext.isFunction(el[eventName]);
 	              }
 	              //save the cached result for future tests
-	              cache[key] = isSupported || !!TAGNAMES[evName];
+	              cache[key] = isSupported;
 	              el = null;
 	              return isSupported;
 	            };
