@@ -63,7 +63,8 @@
         defined = function(test){return typeof test != 'undefined';},
         emptyFn = Ext.emptyFn || function(){},
         OP = Object.prototype;
-
+        
+        
     Ext.lib.Ajax.Queue = function(config) {
 
         config = config ? (config.name ? config : { name : config }) : {};
@@ -312,6 +313,9 @@
         useDefaultXhrHeader  : !!A.useDefaultXhrHeader,
         defaultXhrHeader  : 'Ext.basex',
         
+        //Reusable script tag pool for IE.
+        SCRIPTTAG_POOL    : [],
+        
         poll              : {},
 
         pollInterval      : A.pollInterval || 50,
@@ -479,12 +483,12 @@
             o.isPart || A.activeRequests--;
             
             if (!o.status.isError) {
-                o.status = this.getHttpStatus(o.conn);
+                o.status = this.getHttpStatus(o.conn, isAbort, isTimeout);
                 /*
                  * create and enhance the response with proper status and XMLDOM
                  * if necessary
                  */
-                responseObject = this.createResponseObject(o, callback.argument, isAbort);
+                responseObject = this.createResponseObject(o, callback.argument, isAbort, isTimeout);
             }
             o.isPart || this.releaseObject(o);
 
@@ -494,8 +498,7 @@
              * XHR object had to offer as well
              */
             o.status.isError && (responseObject = Ext.apply({}, responseObject || {},
-                        this.createExceptionObject(o.tId, callback.argument,
-                          (isAbort? isAbort: false), isTimeout, o.status.error)));
+                this.createExceptionObject(o.tId, callback.argument, !!isAbort, !!isTimeout, o.status.error)));
 
             responseObject.options = o.options;
             responseObject.fullStatus = o.status;
@@ -715,7 +718,23 @@
                         multiPart : false,
                         xdomain  : false
                     }, options || {});
-
+                    
+                    //Seek out nested config options
+                    var _to;
+                    if( cb.argument && 
+                         cb.argument.options &&
+                          cb.argument.options.request &&
+                          (_to = cb.argument.options.request.arg) ){
+                            
+                         Ext.apply(O,{
+                           proxied : O.proxied || _to.proxied,
+                           multiPart : O.multiPart || _to.multiPart,
+                           xdomain : O.xdomain ||_to.xdomain,
+                           queue   : O.queue ||_to.queue,
+                           onPart  : O.onPart ||_to.onPart
+                         }); 
+                     }
+            
             if (!this.events
                     || this.fireEvent('request', method, uri, cb, data, O) !== false) {
 
@@ -800,14 +819,46 @@
                                 head = doc.getElementsByTagName("head")[0];
                                 if (head && this.el) {
                                     head.appendChild(this.el.dom);
+                                    this.readyState = 2;
                                 }
                             },
                             abort : function() {
                                 this.readyState = 0;
+                                window[o.cbName] = undefined;
+		                        //IE dislikes this
+		                        Ext.isIE || delete window[o.cbName];
+                                
+		                        var d = Ext.getDom(this.el);
+		                        
+                                if(this.el){
+                                  this.el.removeAllListeners();  
+                                  if(!o.debug){
+                                    if(Ext.isIE){
+                                        //Script Tags are re-usable in IE
+                                        A.SCRIPTTAG_POOL.push(this.el);
+                                    }else{
+	                                    this.el.remove();
+	                                    //Other Browsers will not GBG-collect these tags, so help them along
+	                                    if(d ){
+	                                        for(var prop in d) {delete d[prop];}
+	                                    }
+                                    }
+                                  }
+                                }
+		                        this.el = d = null;
                             },
-                            
-                            getAllResponseHeaders : emptyFn,
-                            getResponseHeader : emptyFn,
+                            _headers : {},
+                            getAllResponseHeaders : function(){
+                                var out=[];
+                                forEach(this._headers,function(value, name){
+                                   value && out.push(name + ': '+value);
+                                });
+                                return out.join('\n');
+                                
+                                },
+                            getResponseHeader : function(header){ 
+                                return this._headers[String(header).toLowerCase()] || ''; 
+                               },
                             onreadystatechange : null,
                             onload : null,
                             readyState : 0,
@@ -826,21 +877,11 @@
 
                         content && typeof(content)=='object' && (this.responseJSON = content);
                         this.responseText = content || null;
-
-                        this.readyState = 4;
                         this.status = !!content ? 200 : 404;
-                        
+                        this.abort();
+                        this.readyState = 4;
                         Ext.isFunction(this.onreadystatechange) && this.onreadystatechange();
-                        window[o.cbName] = undefined;
-                        try {
-                            delete window[o.cbName];
-                        } catch (ex) {}
-
-                        o.debug || this.el.remove();
-                        this.el = null;
-                        
                         Ext.isFunction(this.onload) && this.onload();
-                        
                         
                     }.createDelegate(o.conn, [o], true);
 
@@ -852,19 +893,20 @@
 
                         var params = Ext.urlEncode(o.params) || null;
 
-                        this.el = monitoredNode(f.tag || 'script', {
-                                    type : "text/javascript",
-                                    src : params ? uri
-                                            + (uri.indexOf("?") > -1
-                                                    ? "&"
-                                                    : "?") + params : uri,
-                                    charset : f.charset || options.charset
-                                            || null
+                        uri = params ? uri + (uri.indexOf("?") > -1 ? "&" : "?") + params : uri;
+
+                        this.el = A.monitoredNode(
+                                f.tag || 'script', 
+                                {
+                                    type : f.contentType || "text/javascript",
+                                    src : uri,
+                                    charset : f.charset || options.charset || null
                                 },
                                 null,
                                 f.target, 
                                 true); //defer head insertion until send method
-                                
+                        
+                        this._headers['content-type'] = this.el.dom.type;        
                         this.readyState = 1; // show CallInProgress
                         Ext.isFunction(this.onreadystatechange) && this.onreadystatechange();
 
@@ -945,6 +987,11 @@
 
         abort : function(o, callback, isTimeout) {
 
+            o && Ext.apply(o.status,{
+                isAbort : !!!isTimeout,
+                isTimeout : !!isTimeout,
+                isError  : !!isTimeout || !!o.status.isError
+              }); 
             if (o && o.queued && o.request) {
                 o.request.active = o.queued = false;
                 this.events && this.fireEvent('abort', o, callback);
@@ -952,9 +999,8 @@
             } else if (o && this.isCallInProgress(o)) {
                 
                 if (!this.events || this.fireEvent(isTimeout ? 'timeout' : 'abort', o, callback)!== false){
-	                Ext.isFunction(o.conn.abort) && o.conn.abort();
-	                o.status.isAbort = !(o.status.isTimeout = isTimeout || false);
-                    this.handleTransactionResponse(o, callback, o.status.isAbort, isTimeout);
+	                'abort' in o.conn && o.conn.abort();
+                    this.handleTransactionResponse(o, callback, o.status.isAbort, o.status.isTimeout);
                 }
                 return true;
             } else {
@@ -1096,25 +1142,33 @@
     /**
      * private -- <script and link> tag support
      */
-      var monitoredNode = function(tag, attributes, callback, context, deferred) {
-        attributes = Ext.apply({}, attributes || {});
-        context || (context = window);
-
-        var node = null, doc = context.document,
-            head = doc.getElementsByTagName("head")[0];
-
-        if (doc && head && (node = Ext.get(doc.createElement(tag)))) {
+    A.monitoredNode = function(tag, attributes, callback, context, deferred) {
+        
+        var node = null, doc = (context || window).document,
+            head = doc ? doc.getElementsByTagName("head")[0] : null;
+        
+        if (tag && doc && head) {
+            node = tag.toUpperCase() == 'SCRIPT' && !!A.SCRIPTTAG_POOL.length ? Ext.get(A.SCRIPTTAG_POOL.pop()) : null;
+            if(node){
+                node.removeAllListeners();
+            }else{
+                node = Ext.get(doc.createElement(tag));
+            }
             var ndom = Ext.getDom(node);
             
-            ndom && forEach(attributes, function(value, attrib) {
+            ndom && forEach(attributes || {}, function(value, attrib) {
+                
                 value && (attrib in ndom) && ndom.setAttribute(attrib, value);
             });
 
             if (callback) {
-                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback], true);
-                Ext.capabilities.isEventSupported('load', tag) ? node.on("load", cb) : cb.defer(50);
+                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback||{}], 0);
+                //Ext.capabilities.isEventSupported('load') ? node.on("load", cb) : cb.defer(800);
+                Ext.isIE ? node.on('readystatechange', function(){
+                    this.dom.readyState == 'loaded' && cb();    
+                }) : node.on("load", cb);
             }
-            deferred || head.appendChild(ndom);
+            deferred || ndom.parentNode || head.appendChild(ndom);
         }
         
         return node;
@@ -1363,7 +1417,15 @@
          */
         forEach : function( block, scope) {
             Array.forEach(this, block, scope);
-        }            
+        },
+        
+        reversed : function(){
+	        var length = this.length || 0, t = [];
+	        while (length--) {
+	            t.push(this[length]);
+	        }
+	        return t;   
+	    }   
 
     });
 
@@ -1686,14 +1748,18 @@
 	         */  
 	         isEventSupported : function(evName, testEl){
 	            var TAGNAMES = {
-	              'select':'input','change':'input',
-	              'submit':'form','reset':'form',
-	              'error':'img','load':'img','abort':'img'
-	            },
+	              'select':'input',
+                  'change':'input',
+	              'submit':'form',
+                  'reset':'form',
+                  'load':'img',
+	              'error':'img',
+                  'abort':'img'
+	            }
 	            //Cached results
-	            cache = {},
+	            cache = {}
 	            //Get a tokenized string of the form nodeName:type
-	            getKey = function(type, el){
+	            var getKey = function(type, el){
                     
                     var tEl = Ext.getDom(el);
                     
@@ -1725,7 +1791,7 @@
 	                isSupported = Ext.isFunction(el[eventName]);
 	              }
 	              //save the cached result for future tests
-	              cache[key] = isSupported;
+	              cache[key] = isSupported || !!TAGNAMES[evName];
 	              el = null;
 	              return isSupported;
 	            };
