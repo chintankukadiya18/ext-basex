@@ -45,30 +45,7 @@
         StopIter = "StopIteration",
         defined = function(test){return typeof test !== 'undefined';},
         emptyFn = function(){};
-
-    var domNode = function(tag, attributes, callback, context, deferred) {
-        attributes = Ext.apply({}, attributes || {});
-        context || (context = window);
-
-        var node = null, doc = context.document,
-            head = doc.getElementsByTagName("head")[0];
-
-        if (doc && head && (node = Ext.get(doc.createElement(tag)))) {
-            var ndom = Ext.getDom(node);
-            ndom && forEach(attributes, function(value, attrib) {
-                value && (attrib in ndom) && ndom.setAttribute(attrib, value);
-            });
-
-            if (callback && node) {
-                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback], 0);
-                Ext.capabilities.isEventSupported('load', node) ?  
-                    node.on("load", cb, null, {single:true}) : 
-                        cb.defer(50);
-            }
-            !deferred && head.appendChild(ndom);
-        }
-        return ndom;
-    };
+    
     
     /**
      * @class Ext.ux.ModuleManager
@@ -231,26 +208,28 @@
     /** @private */
     var gather = function(method, url, callbacks, data, options) {
 
+        var tag, attribs;
+        callbacks || (callbacks = {});
+        
         if (method == 'SCRIPT') {
-            return Ext.apply(Ext.get(domNode('script', {
-                                type : "text/javascript",
-                                src : url
-                            }, callbacks, options.target || window)), {
-                        options : options
-                    });
+            tag  = method;
+            attribs = {
+                 type : "text/javascript",
+                  src : url
+             };
+            
         } else if (method == 'LINK') {
-            return Ext.apply(Ext.get(domNode('link', {
-                                rel : "stylesheet",
-                                type : "text/css",
-                                href : url
-                            }, callbacks, options.target || window)), {
-                        options : options
-                    });
-        } else {
-            return A.request(method, url, callbacks, data, options);
+            tag = method;
+            attribs = {
+                    rel : "stylesheet",
+                    type : "text/css",
+                    href : url
+                    };   
         }
-
-    };
+        return tag ? A.monitoredNode(tag, attribs, callbacks, options.target || window) :
+                 A.request.apply(A,arguments);
+     };
+     
     // normalize a resource to name-component hash
     /** @private */
     var modulate = function(moduleName, options) {
@@ -415,11 +394,23 @@
                 poll : function() {
                     if (!this.polling)return;
 
-                    var cb = callback, assert = false;
+                    var cb = callback;
+                    var depends = (window.$JIT ? $JIT.depends : null) || {};
 
-                    var res = Ext.each(this.modules, function(arg, index, args) {
-                           return assert = (MM.loaded(arg) === true);
-                    }, this);
+                    var assert = this.modules.every( function(arg, index, args) {
+                        
+                           var modName = arg.replace('@',''),virtual = false, test=true;
+                              
+                           if(depends[modName] && 
+                             ((virtual = depends[modName].virtual || false) || 
+                               (Ext.isArray(depends[modName].depends && 
+                                  !!depends[modName].length
+                                )))){
+                               test = depends[modName].depends.every(arguments.callee);
+                               test = virtual ? test && ((MM.getModule(modName)||{}).loaded = true): test;
+                           }
+                           return test && (virtual || MM.loaded(modName) === true);
+                    });
 
                     if (!assert && this.polling && !this.aborted) {
                         this.poll.defer(50, this);
@@ -463,9 +454,7 @@
                     return this;
                 }
             };
-
             return block.retry();
-
         },
 
         /**
@@ -696,23 +685,44 @@
          *
          */
         doCallBacks : function(o, success, currModule, args) {
-            var cb;
-            if (currModule) {
+            var cb, C;
+            if (C = currModule) {
                 var res = this.MM.fireEvent.apply(this.MM, [
                                 (success ? 'load' : 'loadexception'),
-                                this.MM, currModule].concat(args || new Array()));
-                !success && (this.active = res);
+                                this.MM, C ].concat(args || []));
+                
+                success || (this.active = (res !== false));
 
                 // Notify other pending async listeners
-                if (this.active && currModule.notify) {
+                if (this.active && Ext.isArray(C.notify)) {
 
-                    forEach(currModule.notify, function(chain, index, chains) {
+                    forEach(C.notify, 
+                        function(chain, index, chains) {
                                 if (chain) {
                                     chain.nextModule();
                                     chains[index] = null;
                                 }
                             });
-                    currModule.notify = new Array();
+                    C.notify = [];
+                }
+                
+                //script Tag cleanup
+                if(C.element && !C.options.debug && C.extension == "js" && C.method == 'DOM'){
+                    
+                    C.element.removeAllListeners();  
+	                var d = C.element.dom;
+                    if(Ext.isIE){
+                        //Script Tags are re-usable in IE
+                       A.SCRIPTTAG_POOL.push(C.element);
+                    }else{
+                        C.element.remove();
+                        //Other Browsers will not GBG-collect these tags, so help them along
+                        if(d ){
+                            for(var prop in d) {delete d[prop];}
+                        }
+                    }
+	                  
+                    C.element = d = null;
                 }
             }
         },
@@ -721,10 +731,13 @@
          *  @private
          *
          */
-        success : function(response) {
-
-            var module = response.argument.module.module, opt = response.argument.module, executable = (!opt.proxied
-                    && module.extension == "js" && !opt.noExecute && opt.method !== 'DOM'), cbArgs = null;
+        success : function(response , ev, target ) {
+            
+            var module = response.argument.module.module, 
+                opt = response.argument.module, 
+                executable = (!opt.proxied && module.extension == "js" && !opt.noExecute && opt.method !== 'DOM'), 
+                cbArgs = null;
+            //console.log(module.name,opt, arguments);   
             module = this.MM.getModule(module.name);
             this.currentModule = module.name;
 
@@ -737,7 +750,7 @@
                         Ext.apply(module, {
                             loaded : true,
                             pending : false,
-                            contentType : response.contentType,
+                            contentType : response.contentType || (target && Ext.fly(target) ? Ext.fly(target).getAttribute('type'):''),
                             content : opt.cacheResponses
                                     || module.extension == "css" ? {
                                 text : response.responseText || null,
@@ -791,9 +804,9 @@
          */
 
         failure : function(response) {
+           
             var module = response.argument.module.module, opt = response.argument.module;
-
-            module.contentType = response.getResponseHeader('Content-Type') || ''
+            module.contentType = response.contentType || ''
             this.currentModule = module.name;
             this.result = module.pending = false;
 
@@ -815,7 +828,7 @@
             while (this.active && (module = this.workList.shift())) {
 
                 // inline callbacks
-                if (typeof module == 'function') {
+                if (Ext.isFunction(module)) {
                     module.apply(this, [this.result, null, this.loaded]);
                     continue;
                 }
@@ -851,7 +864,7 @@
                             moduleObj.pending = true;
                             if (/get|script|dom|link/i.test(options.method)) {
                                 url += (params ? '?' + params : '');
-                                if (options.disableCaching === true) {
+                                if (options.disableCaching == true) {
                                     url += (params ? '&' : '?') + '_dc='
                                             + (new Date().getTime());
                                 }
@@ -862,23 +875,30 @@
                                     ? true
                                     : options.async;
 
-                            transport = gather(options.method == 'DOM'
+                            transport = gather(
+                                        options.method == 'DOM'
                                             ? (moduleObj.extension == 'css'
                                                     ? 'LINK'
                                                     : 'SCRIPT')
-                                            : options.method, url, {
-                                        success : this.success,
-                                        failure : this.failure,
-                                        scope : this,
-                                        argument : {
-                                            module : module
-                                        }
-                                    }, data, options);
-
-                            moduleObj.transport = options.debug ? transport : null;
-                            options.method == 'DOM' && (moduleObj.element = transport);
-                            moduleObj.method = options.method || this.method;
-                            moduleObj.options = options;
+                                            : options.method,
+                                        url, 
+                                        {
+	                                        success : this.success,
+	                                        failure : this.failure,
+	                                        scope : this,
+	                                        argument : {
+	                                            module : module
+	                                        }
+                                        },
+                                        data,
+                                        options);
+                                        
+                            Ext.apply( moduleObj,{
+                                transport : options.debug ? transport : null,
+                                element : options.method == 'DOM' ? transport : null,
+                                method : options.method || this.method,
+                                options : options
+                            });
                         }
 
                         if (options.async) { break; }
@@ -1094,9 +1114,9 @@
 
     /**
      * @class $JIT
-     * @version 1.2
+     * @version 1.3
      * @author Doug Hendricks. doug[always-At]theactivegroup.com 
-     * @copyright 2007-2008, Active Group, Inc. All rights reserved.
+     * @copyright 2007-2009, Active Group, Inc. All rights reserved.
      * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
      * @license <a href="http://www.gnu.org/licenses/gpl.html">GPL 3.0</a>
      * @singleton
@@ -1301,7 +1321,7 @@
       if(!ecode)return;
       var ec = ecode.error || ecode;
       var msg = ec? ec.message || ec.description || ec.name || ecode: null;
-      //forEach(ecode,function(v, n){console.log(n, ":",  v); });
+
       if(msg){
           if(Ext.MessageBox){
               Ext.MessageBox.alert(title||'unknown',msg);
