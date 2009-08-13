@@ -1,6 +1,6 @@
 /* global Ext */
 /*
- * ext-basex 3.5.1
+ * ext-basex 3.5.2
  * ***********************************************************************************
  *
  * Ext.lib.Ajax enhancements:
@@ -727,6 +727,7 @@
                           (_to = cb.argument.options.request.arg) ){
                             
                          Ext.apply(O,{
+                           async : O.async || _to.async,
                            proxied : O.proxied || _to.proxied,
                            multiPart : O.multiPart || _to.multiPart,
                            xdomain : O.xdomain ||_to.xdomain,
@@ -800,13 +801,13 @@
 
 
         /** private */
-        getConnectionObject : function(uri, options) {
+        getConnectionObject : function(uri, options, data) {
             var o, f;
             var tId = this.transactionId;
             options || (options = {});
             try {
                 if (f = options.proxied) { /* JSONP scriptTag Support */
-
+                    
                     o = {
                         tId : tId,
                         status : {isError : false},
@@ -814,7 +815,7 @@
                         // synthesize an XHR object
                         conn : {
                             el : null,
-                            send : function() {
+                            send : function(data) {
                                 var doc = (f.target || window).document,
                                 head = doc.getElementsByTagName("head")[0];
                                 if (head && this.el) {
@@ -868,12 +869,12 @@
                             responseJSON : null
                         },
                         debug : f.debug,
-                        params : options.params || {},
+                        params : Ext.isString(options.params) ?  Ext.urlDecode(options.params) : options.params || {},
                         cbName : f.callbackName || 'basexCallback' + tId,
                         cbParam : f.callbackParam || null
                     };
 
-                    window[o.cbName] = o.cb = function(content, request) {
+                    window[o.cbName] = o.cb = function(content) {
 
                         content && typeof(content)=='object' && (this.responseJSON = content);
                         this.responseText = content || null;
@@ -883,23 +884,29 @@
                         Ext.isFunction(this.onreadystatechange) && this.onreadystatechange();
                         Ext.isFunction(this.onload) && this.onload();
                         
-                    }.createDelegate(o.conn, [o], true);
+                    }.createDelegate(o.conn);
 
                     o.conn.open = function() {
 
                         if (o.cbParam) {
                             o.params[o.cbParam] = o.cbName;
                         }
-
-                        var params = Ext.urlEncode(o.params) || null;
-
-                        uri = params ? uri + (uri.indexOf("?") > -1 ? "&" : "?") + params : uri;
+                        
+                        //apply any new params to any already supplied by the uri and postData
+                        var params = Ext.urlEncode(
+                            Ext.apply(
+                                Ext.urlDecode(data) || {},  //decode any postData
+                                o.params,
+                                uri.indexOf("?") > -1 ? Ext.urlDecode(uri.split('?').last()): false
+                            )) ;
+                        
+                        o.uri = params ? uri.split('?').first() + '?' + params : uri;
 
                         this.el = A.monitoredNode(
                                 f.tag || 'script', 
                                 {
                                     type : f.contentType || "text/javascript",
-                                    src : uri,
+                                    src : o.uri,
                                     charset : f.charset || options.charset || null
                                 },
                                 null,
@@ -930,7 +937,7 @@
         makeRequest : function(method, uri, callback, postData, options) {
 
             var o;
-            if (o = this.getConnectionObject(uri, options)) {
+            if (o = this.getConnectionObject(uri, options, postData)) {
                 o.options = options;
                 var r = o.conn;
                 
