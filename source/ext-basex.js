@@ -1724,11 +1724,14 @@
                 return false;
                 })(),
             
-                /**
+            /**
              * @property {Boolean} hasCookies True if the browser cookies are enabled/supported.
+             * On IE, ModalDialog windows will issue a security risk warning to the user during this check, so assert 
+             * to false. (Cookie implementations on IE's [Modeless|Modal]Dialogs are not supported as 
+             * they run in a seperate ActiveX browser context)
              */
-            hasCookies : !!navigator.cookieEnabled ,
-            
+            hasCookies : Ext.isIE && ('dialogArguments' in window) ? false : !!navigator.cookieEnabled ,
+                        
             /**
              * @property {Boolean} hasCanvas True if the browser has canvas Element support.
              */
