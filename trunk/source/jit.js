@@ -750,7 +750,7 @@
                         Ext.apply(module, {
                             loaded : true,
                             pending : false,
-                            contentType : response.contentType || (target && Ext.fly(target) ? Ext.fly(target).getAttribute('type'):''),
+                            contentType : response.contentType || (target && Ext.fly(target) ? Ext.fly(target).getAttributeNS(null,'type'):''),
                             content : opt.cacheResponses
                                     || module.extension == "css" ? {
                                 text : response.responseText || null,
