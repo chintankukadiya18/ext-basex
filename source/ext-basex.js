@@ -443,7 +443,7 @@
         }(),
 
         /** private */
-        getHttpStatus : function(reqObj) {
+        getHttpStatus : function(reqObj, isAbort, isTimeout) {
 
             var statObj = {
                 status : 0,
@@ -452,8 +452,8 @@
                 isLocal : false,
                 isOK : true,
                 error : null,
-                isAbort : false,
-                isTimeout : false
+                isAbort : !!isAbort,
+                isTimeout : !!isTimeout
             };
 
             try {
@@ -538,6 +538,8 @@
          * Release the allocated XHR object and reset any timers
          */
         releaseObject:function(o){
+            
+            o && (o.conn = null);
             if(o && Ext.value(o.tId,-1)+1){
 	            if(this.poll[o.tId]){
 	                window.clearInterval(this.poll[o.tId]);
@@ -548,7 +550,6 @@
 		            delete this.timeout[o.tId];
 	            }
             }
-            o && (o.conn = null) ;
         },
 
         /**
@@ -1006,7 +1007,7 @@
             } else if (o && this.isCallInProgress(o)) {
                 
                 if (!this.events || this.fireEvent(isTimeout ? 'timeout' : 'abort', o, callback)!== false){
-	                'abort' in o.conn && o.conn.abort();
+                    'abort' in o.conn && o.conn.abort();
                     this.handleTransactionResponse(o, callback, o.status.isAbort, o.status.isTimeout);
                 }
                 return true;
@@ -1064,7 +1065,7 @@
          */
         onStateChange : function(o, callback, mode) {
             
-            if(!o.conn){ return; }
+            if(!o.conn || o.status.isTimeout || o.status.isError){ return; }
             
             var C = o.conn, readyState = ('readyState' in C ? C.readyState : 0);
             if(mode === 'load' || readyState > 2){
