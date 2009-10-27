@@ -1,6 +1,6 @@
 /* global Ext */
-/*
- * ext-basex 3.5.2
+/**
+ * @version 4.0
  * ***********************************************************************************
  *
  * Ext.lib.Ajax enhancements:
@@ -12,14 +12,16 @@
  *   data payloads and sets only one value (per RFC)
  * - Adds fullStatus:{ isLocal, proxied, isOK, isError, isTimeout, isAbort, error, status, statusText} object
  *   to the existing Response Object.
- * - Adds standard HTTP Auth support to every request (XHR userId, password config options)
+ * - Adds standard HTTP Auth cache support to every request (XHR userId, password config options)
  * - options.method prevails over any method derived by the lib.Ajax stack (DELETE, PUT, HEAD etc).
  * - Adds named-Priority-Queuing for Ajax Requests
  * - adds Script=Tag support for foreign-domains (proxied:true) with configurable callbacks.
  * - Adds final features for $JIT support.
  *
- * - Adds Browser capabilities object reporting on presence of (SVG, Canvas, Flash, Cookies, XPath )
- *    if(Ext.capabilities.hasFlash){ ... }
+ * - Adds Browser capabilities object reporting on presence of:
+ *      Ext.capabilities.isEventSupported('resize'[, forElement]) to determine if the browser supports a specific event.
+ *      SVG, Canvas, Flash, Cookies, XPath, Audio(HTML5), ChromeFrame (IE)
+ *      if(Ext.capabilities.hasFlash){ ... }
  * - Adds Ext.overload supported for parameter-based overloading of Function and class methods.
  * - Adds Ext.clone functions for any datatype.
  * - Adds Array prototype features: first, last, clone, forEach, atRandom, include, flatten, compact, unique, filter, map
@@ -27,18 +29,17 @@
  * - Adds Array.slice support for other browsers (Gecko already supports it)
  *    @example:  Array.slice( someArray, 2 )
  * - Adds Ext[isFunction, isObject, isDocument, isElement, isEvent]  methods.
- * - Adds Ext.isEventSupported('resize'[, forElement]) to determine if the browser supports a specific event.
  * - Adds multiPart Response handling (via onpart callbacks and/or parts Array of response Object)
  * - Adds parsed contentType to response objects
  * - Adds Xdomain request support for modern browsers
  *
  * ***********************************************************************************
- * Author: Doug Hendricks. doug[always-At]theactivegroup.com Copyright
- * 2007-2009, Active Group, Inc. All rights reserved.
+ * @author Doug Hendricks. doug[always-At]theactivegroup.com 
+ * @copyright 2007-2009, Active Group, Inc. All rights reserved.
  * ***********************************************************************************
  *
- * License: ext-basex is licensed under the terms of : GNU Open Source GPL 3.0
-  *
+ * @license <a href="http://www.gnu.org/licenses/gpl.html">GPL 3.0</a>
+ *
  * Commercial use is prohibited without a Developer License, see:
  * http://licensing.theactivegroup.com.
  *
@@ -315,6 +316,47 @@
         
         //Reusable script tag pool for IE.
         SCRIPTTAG_POOL    : [],
+        _domRefs          : [],        
+        onUnload          : function(){
+           Ext.Element.uncache.apply(Ext.Element, A.SCRIPTTAG_POOL.concat(A._domRefs));
+           delete A._domRefs;
+           delete A.SCRIPTTAG_POOL;
+        },
+        
+        /**
+	     * private -- <script and link> tag support
+	     */
+	    monitoredNode : function(tag, attributes, callback, context, deferred) {
+	        
+	        var node = null, doc = (context || window).document,
+	            head = doc ? doc.getElementsByTagName("head")[0] : null;
+	        
+	        if (tag && doc && head) {
+	            node = tag.toUpperCase() == 'SCRIPT' && !!A.SCRIPTTAG_POOL.length ? Ext.get(A.SCRIPTTAG_POOL.pop()) : null;
+	            if(node){
+	                node.removeAllListeners();
+	            }else{
+	                node = Ext.get(doc.createElement(tag));
+	            }
+	            var ndom = Ext.getDom(node);
+	            
+	            ndom && forEach(attributes || {}, function(value, attrib) {
+	                
+	                value && (attrib in ndom) && ndom.setAttribute(attrib, value);
+	            });
+	
+	            if (callback) {
+	                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback||{}], 0);
+	                
+	                Ext.isIE ? node.on('readystatechange', function(){
+	                    this.dom.readyState == 'loaded' && cb();    
+	                }) : node.on("load", cb);
+	            }
+	            deferred || ndom.parentNode || head.appendChild(ndom);
+	        }
+	        A._domRefs.push(node);
+	        return node;
+	    },
         
         poll              : {},
 
@@ -362,17 +404,19 @@
             try {
                 options.xdomain && window.XDomainRequest && (obj.conn =  new XDomainRequest());
                 
-                if (!defined(obj.conn) && window.ActiveXObject && !!Ext.value(options.forceActiveX, this.forceActiveX)) {
+                if (!defined(obj.conn) && 
+                   Ext.capabilities.hasActiveX && 
+                     !!Ext.value(options.forceActiveX, this.forceActiveX)) {
                     throw ("IE7forceActiveX");
                 }
                 obj.conn || (obj.conn = new XMLHttpRequest());
                 
             } catch (eo) {
-                var actX = window.ActiveXObject ?
+                var actX = Ext.capabilities.hasActiveX ?
                     ( options.multiPart ? this.activeXMultipart : this.activeX ) : null ;
                     
                 if(actX){
-	                for (var i = 0, l = actX.length; i < l; i++) {
+	                for (var i = 0, l = actX.length; i < l; ++i) {
 	                    try {
 	                        obj.conn = new ActiveXObject(actX[i]);
 	                        break;
@@ -426,8 +470,11 @@
 	                            if (opt.selected) {
 	                                data += String.format("{0}={1}&",
 	                                     encoder(name),
-	                                     (opt.hasAttribute ? opt.hasAttribute('value') : 
-                                           opt.getAttribute('value') !== null) ? opt.value : opt.text);
+	                                     encoder(
+                                           opt.hasAttribute && opt.hasAttribute('value') &&
+                                              opt.getAttribute('value') !== null ? opt.value : opt.text
+                                             )
+                                       );
 	                            }
 	                        });
 	                    } else if(!reInput.test(type)) {
@@ -575,15 +622,16 @@
         
          /** private */
         createResponseObject : function(o, callbackArg, isAbort, isTimeout) {
-            var obj = {
-                responseXML : null,
-                responseText : '',
-                responseStream : null,
-                responseJSON : null,
-                contentType : null,
-                getResponseHeader : emptyFn,
-                getAllResponseHeaders : emptyFn
-            };
+            var CTYPE = 'content-type', 
+                obj = {
+	                responseXML : null,
+	                responseText : '',
+	                responseStream : null,
+	                responseJSON : null,
+	                contentType : null,
+	                getResponseHeader : emptyFn,
+	                getAllResponseHeaders : emptyFn
+	            };
 
             var headerObj = {}, headerStr = '';
 
@@ -615,7 +663,7 @@
                     o.status.isError = true; // trigger future exception callback
                     o.status.error = ex1;
                 }
-                finally{ obj.contentType = obj.contentType || headerObj['content-type'] || ''; }
+                finally{ obj.contentType = obj.contentType || headerObj[CTYPE] || ''; }
 
                 if ((o.status.isLocal || o.proxied)
                         && typeof obj.responseText == 'string') {
@@ -632,7 +680,7 @@
 
                         var xdoc = null;
                         try { // ActiveX may be disabled
-                            if (window.ActiveXObject) {
+                            if (Ext.capabilities.hasActiveX) {
                                 xdoc = new ActiveXObject("MSXML2.DOMDocument.3.0");
                                 xdoc.async = false;
                                 xdoc.loadXML(obj.responseText);
@@ -657,11 +705,11 @@
                                 || (obj.responseXML.parseError || 0) !== 0
                                 || obj.responseXML.childNodes.length === 0;
                         parseBad || 
-                            (obj.contentType = headerObj['content-type'] = obj.responseXML.contentType || 'text\/xml');
+                            (obj.contentType = headerObj[CTYPE] = obj.responseXML.contentType || 'text\/xml');
                     }
                 }
 
-                if (o.options.isJSON || (this.reCtypeJSON && this.reCtypeJSON.test(headerObj['content-type'] || ""))) {
+                if (o.options.isJSON || (this.reCtypeJSON && this.reCtypeJSON.test(headerObj[CTYPE] || ""))) {
                     try {
                         Ext.isObject(obj.responseJSON) || 
                             (obj.responseJSON = Ext.isFunction( this.decodeJSON ) && 
@@ -681,7 +729,7 @@
                         tId     : o.tId,
                         status  : o.status.status,
                         statusText : o.status.statusText,
-                        contentType : obj.contentType || headerObj['content-type'],
+                        contentType : obj.contentType || headerObj[CTYPE],
                         getResponseHeader : function(header){return headerObj[(header||'').trim().toLowerCase()];},
                         getAllResponseHeaders : function(){return headerStr;},
                         fullStatus : o.status,
@@ -1007,13 +1055,12 @@
             } else if (o && this.isCallInProgress(o)) {
                 
                 if (!this.events || this.fireEvent(isTimeout ? 'timeout' : 'abort', o, callback)!== false){
-                    'abort' in o.conn && o.conn.abort();
+                    ('abort' in o.conn) && o.conn.abort();
                     this.handleTransactionResponse(o, callback, o.status.isAbort, o.status.isTimeout);
                 }
                 return true;
-            } else {
-                return false;
-            }
+            } 
+            return false;
         },
         
         isCallInProgress : function(o) {
@@ -1147,40 +1194,6 @@
         ]
 
     });
-    /**
-     * private -- <script and link> tag support
-     */
-    A.monitoredNode = function(tag, attributes, callback, context, deferred) {
-        
-        var node = null, doc = (context || window).document,
-            head = doc ? doc.getElementsByTagName("head")[0] : null;
-        
-        if (tag && doc && head) {
-            node = tag.toUpperCase() == 'SCRIPT' && !!A.SCRIPTTAG_POOL.length ? Ext.get(A.SCRIPTTAG_POOL.pop()) : null;
-            if(node){
-                node.removeAllListeners();
-            }else{
-                node = Ext.get(doc.createElement(tag));
-            }
-            var ndom = Ext.getDom(node);
-            
-            ndom && forEach(attributes || {}, function(value, attrib) {
-                
-                value && (attrib in ndom) && ndom.setAttribute(attrib, value);
-            });
-
-            if (callback) {
-                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback||{}], 0);
-                
-                Ext.isIE ? node.on('readystatechange', function(){
-                    this.dom.readyState == 'loaded' && cb();    
-                }) : node.on("load", cb);
-            }
-            deferred || ndom.parentNode || head.appendChild(ndom);
-        }
-        
-        return node;
-    };
     
     if (Ext.util.Observable) {
 
@@ -1255,10 +1268,9 @@
             }
             var res = new Array(len);
 
-            for (var i = 0; i < len; i++) {
-                if (i in this) {
-                    res[i] = fun.call(scope || this, this[i], i, this);
-                }
+            for (var i = 0; i < len; ++i) {
+                i in this &&
+                    (res[i] = fun.call(scope || this, this[i], i, this));
             }
             return res;
         },
@@ -1342,7 +1354,7 @@
         },
         
         indexOf : function(o){
-	       for (var i = 0, len = this.length; i < len; i++){
+	       for (var i = 0, len = this.length; i < len; ++i){
 	           if(this[i] == o) return i;
 	       }
 	       return -1;
@@ -1421,7 +1433,7 @@
          * Array forEach Iteration based on previous work by: Dean Edwards
          * (http://dean.edwards.name/weblog/2006/07/enum/) Gecko already
          * supports forEach for Arrays : see
-         * http://developer.mozilla.org/en/docs/Core_JavaScript_1.5_Reference:Objects:Array:forEach
+         * http://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Array/forEach
          */
         forEach : function( block, scope) {
             Array.forEach(this, block, scope);
@@ -1503,15 +1515,15 @@
          * Array forEach Iteration based on previous work by: Dean Edwards
          * (http://dean.edwards.name/weblog/2006/07/enum/) Gecko already
          * supports forEach for Arrays : see
-         * http://developer.mozilla.org/en/docs/Core_JavaScript_1.5_Reference:Objects:Array:forEach
+         * https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Array/forEach
          */
         forEach : function( collection, block, scope) {
 
             if (typeof block != "function") {
                 throw new TypeError();
             }
-            for (var i = 0, l = collection.length; i < l; i++) {
-                block.call(scope, collection[i], i, collection);
+            for (var i = 0, l = collection.length >>> 0; i < l; ++i) {
+               (i in collection) && block.call(scope || null, collection[i], i, collection);
             }
           }
     });
@@ -1532,7 +1544,7 @@
 
     Ext.applyIf(Boolean.prototype, {
         clone : function(){
-           return this == true; 
+           return this === true; 
         }
     }); 
     
@@ -1602,7 +1614,7 @@
                };
            }
            var fnA = [].concat(fn);
-           for(var i=0,l=fnA.length; i<l; i++){
+           for(var i=0,l=fnA.length; i<l; ++i){
              //ensures no duplicate call signatures, but last in rules!
              ov[fnA[i].length] = fnA[i];
            }
@@ -1680,21 +1692,36 @@
     /**
      * @class Ext.capabilities
      * @singleton
+     * @version 4.0
+     * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
+     * @license <a href="http://www.gnu.org/licenses/gpl.html">GPL 3.0</a> 
+     * @author Doug Hendricks. Forum ID: <a href="http://extjs.com/forum/member.php?u=8730">hendricd</a> 
+     * @copyright 2007-2009, Active Group, Inc. All rights reserved.
      * @desc Describes Detected Browser capabilities.
      */
     Ext.capabilities = {
             /**
              * @property {Boolean} hasActiveX True if the Browser support (and is enabled) ActiveX.
              */
-            hasActiveX : !!window.ActiveXObject,
+            hasActiveX : defined(window.ActiveXObject),
             
             /**
-             * @property {Boolean} hasXDR True, if the Browser has Cross-Domain Ajax request capability.
+             * @property {Boolean} hasXDR True if the Browser has native Cross-Domain Ajax request support.
              */
             hasXDR  : function(){
-                return (Ext.isIE && defined(window.XDomainRequest)) 
-                    || Ext.isSafari4 
-                    || (Ext.isGecko && 'withCredentials' in new XMLHttpRequest()) ;
+                return defined(window.XDomainRequest) || (defined(window.XMLHttpRequest) && 'withCredentials' in new XMLHttpRequest());
+            }(),
+            
+            /**
+             * @property {Boolean} hasChromeFrame true, if the Google ChromeFrame plugin is install on IE
+             */
+            hasChromeFrame : function(){
+                try{
+                  if(defined(window.ActiveXObject) && !!(new ActiveXObject("ChromeTab.ChromeFrame")))return true;
+                }catch(ef){}
+                var a = navigator.userAgent.toLowerCase();
+                return !!(a.indexOf("chromeframe")>=0 || a.indexOf("x-clock")>=0 );  
+                
             }(),
             
             /**
@@ -1702,7 +1729,7 @@
              */
             hasFlash : (function(){
                 //Check for ActiveX first because some versions of IE support navigator.plugins, just not the same as other browsers
-                if(window.ActiveXObject){
+                if(defined(window.ActiveXObject)){
                     try{
                         //try to create a flash instance
                         new ActiveXObject("ShockwaveFlash.ShockwaveFlash");
@@ -1712,7 +1739,7 @@
                     return false;
                 }else if(navigator.plugins){
                     //Loop through all the plugins
-                    for(var i=0, length = navigator.plugins.length; i < length; i++){
+                    for(var i=0, length = navigator.plugins.length; i < length; ++i){
                         //test to see if any plugin names contain the word flash, if so it must support it - return true
                         if((/flash/gi).test(navigator.plugins[i].name)){
                             return true;
@@ -1739,6 +1766,13 @@
             hasCanvas  : !!document.createElement("canvas").getContext,
             
             /**
+             * @property {Boolean} hasCanvasText True if the browser has canvas Element Text support.
+             */
+            hasCanvasText : function(){
+                return !!(this.hasCanvas && typeof document.createElement('canvas').getContext('2d').fillText == 'function');
+            }(),
+            
+            /**
              * @property {Boolean} hasSVG True if the browser has SVG support.
              */
             hasSVG     : !!(document.createElementNS && document.createElementNS('http://www.w3.org/2000/svg', 'svg').width),
@@ -1748,16 +1782,173 @@
              */
             hasXpath   : !!document.evaluate,
             
+            /**
+             * @property {Boolean} hasWorkers True if the browser has support for threaded Workers.
+             */
+            hasWorkers  : defined(window.Worker),
+            
+            /**
+             * @property {Boolean} hasOffline True if the browser has offline support. 
+             */
+            hasOffline : defined(window.applicationCache),
+            
+            /**
+             * @property {Boolean} hasLocalStorage True if the browser has Local Storage support. 
+             */
+            hasLocalStorage : defined(window.localStorage),
+            
+            /**
+             * Basic HTML5 geolocation services support test 
+             * @property {Boolean} hasGeoLocation
+             */
+            hasGeoLocation : defined(navigator.geolocation),
+            
             hasBasex   : true,
             
             /**
-	         * Determine whether a specified DOMEvent is supported by a given HTMLElement or Object.
+             * 
+             * @property {Boolean/Object} hasAudio
+             * @desc Basic HTML5 Element support for the &lt;audio> tag and/or Audio object.
+             * @example
+ If the browser has &lt;audio> tag or Audio object support,<br />the property contains a mime-type map of standard audio formats.
+       {
+        mp3   : false,  //mp3
+        ogg   : false,  //Ogg Vorbis
+        wav   : true,   //wav 
+        basic : false,  //au, snd
+        aif   : false,  //aif, aifc, aiff
+        tag  : true,    //is audio HTML element supported?
+        object : true,  //is the window.Audio Object supported
+        <b>testMime</b> : function()
+        }
+        
+The included <b>testMime</b> function permits selective mime-type testing as well for custom audio formats:
+        if(Ext.capabilities.hasAudio &&
+             Ext.capabilities.hasAudio.testMime('audio/ogg') ){
+                alert ('Vorbis playback is supported');
+          }
+         */
+            hasAudio   : function(){
+                
+                var aTag = !!document.createElement('audio').canPlayType,
+                    aAudio = ('Audio' in window) ? new Audio('') : {},
+	                caps = aTag || ('canPlayType' in aAudio) ? 
+                        { tag   : aTag, 
+                         object : ('play' in aAudio),
+                         
+                         /*
+                          * Test for a specific audio mime-type
+                          */
+                         testMime : function(mime){
+                             var M; return (M = aAudio.canPlayType ? aAudio.canPlayType(mime): 'no') !== 'no' && M !== '';
+                           }
+                         } : false,
+                    mime,
+                    chk,
+                    mimes = {
+                            mp3   : 'audio/mpeg', //mp3
+                            ogg   : 'audio/ogg',  //Ogg Vorbis
+                            wav   : 'audio/x-wav', //wav 
+                            basic : 'audio/basic', //au, snd
+                            aif   : 'audio/x-aiff' //aif, aifc, aiff
+                        };
+                    
+                    if(caps && caps.testMime){
+                       for (chk in mimes){ 
+	                        caps[chk] = caps.testMime(mimes[chk]);
+	                    }
+                    }                     
+                    return caps;
+            }(),
+            
+            /**
+             *  
+             * @property {Boolean/Object} hasVideo
+             * @desc Basic HTML5 Element support for the &lt;video> tag.
+             * @example
+ If the browser has &lt;video> tag support, the property contains a codec map of supported video formats.
+       {
+        mp4  : false,
+        ogg  : true,
+        testCodec : function()
+        }
+The testCodec function permits selective codec support testing:
+        if(Ext.capabilities.hasVideo &&
+             Ext.capabilities.hasVideo.testCodec("avc1.42E01E, mp4a.40.2") ){
+                alert ('Apple Video decoder is supported');
+          }
+           */
+            hasVideo  : function(){
+                   var vTag = !!document.createElement('video').canPlayType, 
+                    vVideo = vTag ? document.createElement('video') : {},
+                    caps = ('canPlayType' in vVideo) ? 
+                      {     tag : vTag,
+                      /*
+                       * Test for a specific video and codec (eg: 'video/ogg; codecs="theora, vorbis"' ) 
+                       */
+                      testCodec : function(codec){
+                         var C; return (C = vVideo.canPlayType ? vVideo.canPlayType(codec): 'no') !== 'no' && C !== '';   
+                         }
+                      } : false,
+                    codec,
+                    chk,
+                    codecs = {
+                            mp4 : 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"', //mp4 (Apple: patented licensed codec)
+                            ogg : 'video/ogg; codecs="theora, vorbis"'          //ogg Vorbis codec
+                        };
+                    
+                   if(caps && caps.testCodec){
+                       for (chk in codecs){ 
+                            caps[chk] = caps.testCodec(codecs[chk]);
+                        }
+                    }                     
+                   return caps;
+            }(),
+            
+             /**
+             * @desc Basic HTML5 Input Element support for autofocus. 
+             * @return {Boolean} 
+             */
+            hasInputAutoFocus : function(){
+                return ('autofocus' in (document.createElement('input')));
+            }(),
+            
+            /**
+             * @desc Basic HTML5 Input Element support for placeholder 
+             * @return {Boolean}
+             */
+            hasInputPlaceHolder : function(){
+                return ('placeholder' in (document.createElement('input')));
+            }(),
+            
+            /**
+             * 
+             * @param {String) type The input type to test for.
+             * @return {Boolean} 
+             * @desc Does the HTML5 enabled browser support extended input types
+             * @example Typical input type tests:
+             * search, number, range, color, tel, url, email, date, month, week, tine, datetime, datetime-local
+             */
+            hasInputType : function(type){
+              var el = document.createElement("input");
+              if(el){
+                 try{ el.setAttribute("type", type)}catch(e){};
+                 return el.type !== 'text';
+              }
+              return false;
+            },
+            
+            /**
+	         * 
 	         * @param {String} type The eventName (without the 'on' prefix)
 	         * @param {HTMLElement/Object/String} testEl (optional) A specific HTMLElement/Object to test against, otherwise a tagName to test against.
-	         * based on the passed eventName is used, or DIV as default. 
-	         * @return {Boolean} True if the passed object supports the named event. 
+	         * based on the passed eventName is used, or DIV as default. (window and document objects are supported)
+	         * @return {Boolean} True if the passed object supports the named event.
+             * @desc Determines whether a specified DOMEvent is supported by a given HTMLElement or Object.
+             * @example Does the &lt;script> tag support the load event?
+   Ext.capabilities.isEventSupported('load', document.createElement('script')); 
 	         */  
-	        isEventSupported : function(evName, testEl){
+	        isEventSupported : function(){
 	            var TAGNAMES = {
 	              'select':'input',
                   'change':'input',
@@ -1768,20 +1959,20 @@
                   'abort':'img'
 	            }
 	            //Cached results
-	            cache = {}
-	            //Get a tokenized string of the form nodeName:type
-	            var getKey = function(type, el){
-                    
-                    var tEl = Ext.getDom(el);
-                    
-	                return (tEl ?
+	            var cache = {},
+                    onPrefix = /^on/i,
+	                //Get a tokenized string of the form nodeName:type
+	                getKey = function(type, el){
+	                    var tEl = Ext.getDom(el);
+		                return (tEl ?
 	                           (Ext.isElement(tEl) || Ext.isDocument(tEl) ?
 	                                tEl.nodeName.toLowerCase() :
 	                                    el.self ? '#window' : el || '#object')
 	                       : el || 'div') + ':' + type;
-	            };
+	                };
 	
 	            return function (evName, testEl) {
+                  evName = (evName || '').replace(onPrefix,'');
                   var el, isSupported = false;
                   var eventName = 'on' + evName;
                   var tag = (testEl ? testEl : TAGNAMES[evName]) || 'div';
@@ -1809,7 +2000,7 @@
 	
 	        }()
         };
-
+        Ext.EventManager.on(window,   "beforeunload",  A.onUnload ,A,{single:true});
 })();
 
  // enumerate custom class properties (not prototypes unless protos==true)
@@ -1824,6 +2015,33 @@
         }
       }
     },
+    
+    // Credit: @Animal -- the_bagbournes@btinternet.com
+    createBuffered: function(buffer, scope){
+        var method = this, task = new Ext.util.DelayedTask();
+        return function(){
+            task.delay(buffer, method, scope, Array.slice(arguments,0));
+        };
+    },
+    
+    /**
+     * Credit: @Animal -- the_bagbournes@btinternet.com
+     * Creates a delegate (callback) which, when called, executes after a specific delay.
+     * Optionally, a replacement (or additional) argument list may be specified.
+     * @param {Number} delay The number of milliseconds to defer execution by whenever called.
+     * @param {Object} scope (optional) The scope (<code>this</code> reference) used by the function at execution time.
+     * @param {Array} args (optional) Override arguments for the call. (Defaults to the arguments passed by the caller)
+     * @param {Boolean/Number} appendArgs (optional) if True args are appended to call args instead of overriding,
+     * if a number the args are inserted at the specified position.
+     * @return {Function} A function which, when called, executes the original function after the specified delay.
+     */
+    createDelayed: function(delay, scope, args, appendArgs){
+        var method = (scope || args) ? this.createDelegate(scope, args, appendArgs) : this;
+        return delay ? function() {
+            setTimeout(method, delay);
+        } : method;
+    },
+
 
     clone : function(deep){ return this;}
   }); 

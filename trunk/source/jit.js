@@ -572,7 +572,9 @@
                                 this.styleAdjust.replacement || '');
                     }
 
-                    rules = module.element = doc.createElement("style");
+                    rules = doc.createElement("style");
+                    module.element = Ext.get(rules);
+                    A._domRefs.push(module.element);
                     rules.setAttribute("type", "text/css");
                     if (Ext.isIE) {
                         head.appendChild(rules);
@@ -612,7 +614,7 @@
                 if (el = module.element) {
                     el.dom ? el.removeAllListeners().remove(true) : Ext.removeNode(el);
                 }
-                module.transport = module.element = el = null;
+                module.element = el = null;
             }
 
         },
@@ -684,8 +686,9 @@
          *  @private
          *
          */
-        doCallBacks : function(o, success, currModule, args) {
+        doCallBacks : function(options, success, currModule, args) {
             var cb, C;
+            
             if (C = currModule) {
                 var res = this.MM.fireEvent.apply(this.MM, [
                                 (success ? 'load' : 'loadexception'),
@@ -695,7 +698,6 @@
 
                 // Notify other pending async listeners
                 if (this.active && Ext.isArray(C.notify)) {
-
                     forEach(C.notify, 
                         function(chain, index, chains) {
                                 if (chain) {
@@ -705,25 +707,27 @@
                             });
                     C.notify = [];
                 }
-                
+               
                 //script Tag cleanup
-                if(C.element && !C.options.debug && C.extension == "js" && C.method == 'DOM'){
-                    
+                if(C.element && !options.debug && C.extension == "js" && options.method == 'DOM'){
+                         
                     C.element.removeAllListeners();  
 	                var d = C.element.dom;
                     if(Ext.isIE){
                         //Script Tags are re-usable in IE
-                       A.SCRIPTTAG_POOL.push(C.element);
+                        A.SCRIPTTAG_POOL.push(C.element);
                     }else{
+                        Ext.Element.uncache(C.element);
                         C.element.remove();
                         //Other Browsers will not GBG-collect these tags, so help them along
-                        if(d ){
+                        if(d){
                             for(var prop in d) {delete d[prop];}
                         }
                     }
-	                  
-                    C.element = d = null;
+                    d = null;
+                    delete C.element;
                 }
+                
             }
         },
 
@@ -894,7 +898,6 @@
                                         options);
                                         
                             Ext.apply( moduleObj,{
-                                transport : options.debug ? transport : null,
                                 element : options.method == 'DOM' ? transport : null,
                                 method : options.method || this.method,
                                 options : options
@@ -1114,7 +1117,7 @@
 
     /**
      * @class $JIT
-     * @version 1.3
+     * @version 1.4
      * @author Doug Hendricks. doug[always-At]theactivegroup.com 
      * @copyright 2007-2009, Active Group, Inc. All rights reserved.
      * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
