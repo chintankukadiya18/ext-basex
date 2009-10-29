@@ -1,0 +1,25 @@
+{
+    projectName: 'base-x',
+    deployDir: 'build',
+    licenseText: "ext-basex/$JIT Adapter Extensions for ExtJS Library 2.0+ and Ext Core 3.0+\nCopyright(c) 2008-2009 Active Group, Inc.\nlicensing@theactivegroup.com\nhttp://licensing.theactivegroup.com",
+    pkgs: [{
+        name: 'basex',
+        file: 'ext-basex.js',
+        isDebug: true,
+        fileIncludes: [
+        {
+            text: 'ext-basex.js',
+            path: ''
+        }]
+        
+    }],
+    resources : [{
+        src: 'license.txt',
+        dest: 'license.txt',
+        filters: ".*"
+    },{
+        src: 'readme.txt',
+        dest: 'readme.txt',
+        filters: ".*"
+    }]
+}
