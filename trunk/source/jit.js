@@ -102,7 +102,7 @@
      *
      * Configuration options
      */
-
+    Ext.namespace('Ext.ux');
     Ext.ux.ModuleManager = function(config) {
 
         Ext.apply(this, config || {}, {
@@ -1205,6 +1205,19 @@
      *      }
      *  });
      *  
+     *  Another asynchronous method available is namespace/object polling:
+     *  $JIT('ux/Rowediter');
+     *  $JIT.onClassAvailable('Ext.ux.grid.RowEditor',function(available){
+              if(available){
+                   var plugin = new Ext.ux.grid.RowEditor().init(this);
+                   .....
+              }
+          },
+          myGrid,
+          30  //second timeout
+         );
+     *  
+     *  
      *  //Load a script via script tag:
      *  $JIT.script('resources/script/admin[.js]', function(loaded){ ... } );
      *  
@@ -1256,6 +1269,85 @@
              *  $JIT.onAvailable(['tree','grid'], this.buildWin , scope,  timeout);
              */
             onAvailable : Ext.Loader.onAvailable.createDelegate(L),
+            
+            /**
+             * @name onClassAvailable
+             * @methodOf $JIT
+             * Invoke the passed callback when all specified class Objects are available.
+             * @param {Array,String} classList single of Array of string classNames to test.
+             * @param {Function} callbackFn Callback function invoked with the following arguments:<p>
+             *   {Boolean} success,
+             *   {Array} classes</p>
+             * @param {Object} scope Scope with call the callback with.
+             * @param (Integer) timeout Number of seconds to wait before timeout (default 30 seconds)
+             * @example
+  $JIT.onClassAvailable('Ext.ux.grid.RowEditor',function(available){
+      if(available){
+         var plugin = new Ext.ux.grid.RowEditor().init(this);
+         .....
+      }
+    },
+    myGrid
+    );
+  
+ or
+ 
+ $JIT.onClassAvailable(['Ext.ux.grid.RowEditor','Ext.ux.ManagedIFrame'],classesAreHereFn);
+             */
+            onClassAvailable : (function(){ 
+            
+	            var options = null;
+	            
+	            var F = function OCAV(classList, callback, scope, timeout) { 
+		               var o, 
+		                   d, 
+		                   classes=[],
+		                   opt = {
+		                      interval : 100,
+		                      retries  : (timeout||30000)/100,
+		                      callback : callback || Ext.emptyFn,
+		                      scope    : scope || null
+		                      };
+		                     
+	
+	                   if(!options){
+	                       options = Ext.clone(opt);
+	                   }
+		               
+		               Ext.each([].concat(classList||[]).compact(), 
+		                  function (v) {
+		                     if(Ext.isString(v)){
+			                     d = v.split(".");
+			                     if(o = window[d[0]]){
+				                     Ext.each(d.slice(1), 
+				                        function (next) {
+				                           return !!(o = o[next]);
+				                       }); 
+				                       o && classes.push(o);
+			                      } else return false;
+	                         }
+		                 }); 
+                         
+                         //callback with the first Array element if only one
+                         var C = classes.compact();
+                         C = C.length < 2 ? C.first() : C;
+                         
+	                     if(!!o){ 
+		                    options.callback.call(options.scope, true, C);
+		                 }else{
+		                    if(--options.retries){
+	                           arguments.callee.defer(options.interval,this,arguments);
+	                           return;
+	                        }
+		                    else {
+	                           options.callback.call(options.scope, false, C);
+	                        }
+		                }
+	                    options = null;
+		             };
+	                 var OCAV = null;
+	                 return F;
+            })(),
 
             //Logical Registration of a module  eg: $JIT.provide('mainAppStart');
             provide     : Ext.provide = L.provides.createDelegate(L),

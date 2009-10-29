@@ -1739,9 +1739,9 @@
                     return false;
                 }else if(navigator.plugins){
                     //Loop through all the plugins
-                    for(var i=0, length = navigator.plugins.length; i < length; ++i){
+                    for(var i=0, P=navigator.plugins,length = P.length; i < length; ++i){
                         //test to see if any plugin names contain the word flash, if so it must support it - return true
-                        if((/flash/gi).test(navigator.plugins[i].name)){
+                        if((/flash/i).test(P[i].name)){
                             return true;
                         }
                     }
