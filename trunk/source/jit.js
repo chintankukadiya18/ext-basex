@@ -1117,7 +1117,7 @@
 
     /**
      * @class $JIT
-     * @version 1.4
+     * @version 1.4.1
      * @author Doug Hendricks. doug[always-At]theactivegroup.com 
      * @copyright 2007-2009, Active Group, Inc. All rights reserved.
      * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
@@ -1265,8 +1265,14 @@
              * @name onAvailable
              * @methodOf $JIT
              * Invoke the passed callback when all named modules in the array are available
+             * @param {Array,String} classList single of Array of string classNames to test.
+             * @param {Function} callbackFn Callback function invoked with the following arguments:<p>
+             *   {Boolean} success,
+             *   {Array} classes</p>
+             * @param {Object} scope Scope with call the callback with.
+             * @param (Integer) timeout Number of seconds to wait before timeout (default 30 seconds)
              * @example
-             *  $JIT.onAvailable(['tree','grid'], this.buildWin , scope,  timeout);
+  $JIT.onAvailable(['tree','grid'], this.buildWin , scope,  timeout);
              */
             onAvailable : Ext.Loader.onAvailable.createDelegate(L),
             
