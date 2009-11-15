@@ -318,7 +318,6 @@
         SCRIPTTAG_POOL    : [],
         _domRefs          : [],        
         onUnload          : function(){
-           Ext.Element.uncache.apply(Ext.Element, A.SCRIPTTAG_POOL.concat(A._domRefs));
            delete A._domRefs;
            delete A.SCRIPTTAG_POOL;
         },
@@ -832,7 +831,9 @@
                 } else if (O.jsonData) {
                     cType || (cType = 'application/json; charset=utf-8');
                     method = 'POST';
-                    data = Ext.isObject(O.jsonData) ? Ext.encode(O.jsonData) : O.jsonData;
+                    data = (Ext.isArray(O.jsonData) || Ext.isObject(O.jsonData)) ? 
+                        Ext.encode(O.jsonData) : 
+                            O.jsonData;
                 }
                 if (data) {
                     cType || (cType = this.useDefaultHeader
@@ -1624,7 +1625,7 @@
        };
 
     
-    Ext.applyIf(Ext,{
+    Ext.apply(Ext,{
         overload : overload( overload,
            [
              function(fn){ return overload(null, fn);},
@@ -1632,15 +1633,10 @@
                  return obj[mname] = overload(obj[mname],fn);}
           ]),
           
-        isIterable : function(obj){
-            //check for array or arguments
-            if( obj === null || obj === undefined )return false; 
-            if(Ext.isArray(obj) || !!obj.callee || Ext.isNumber(obj.length) ) return true;
-            
-            return !!((/NodeList|HTMLCollection/i).test(OP.toString.call(obj)) || //check for node list type
-              //NodeList has an item and length property
-              //IXMLDOMNodeList has nextNode method, needs to be checked first.
-             obj.nextNode || obj.item || false); 
+        isIterable : function(e){
+            if (Ext.isArray(e) || e.callee) { return true; } 
+		    if (/NodeList|HTMLCollection/.test(OP.toString.call(e))) { return true; } 
+		    return (typeof e.nextNode != 'undefined' || e.item) && Ext.isNumber(e.length); 
         },
 
         isArray : function(obj){
@@ -1648,7 +1644,7 @@
         },
 
         isObject:function(obj){
-            return (obj !== null) && typeof obj == 'object';
+            return !!obj && OP.toString.apply(obj) == '[object Object]';
         },
         
         isNumber: function(obj){
@@ -1664,7 +1660,11 @@
         },
 
         isElement : function(obj){
-            return obj && Ext.type(obj)== 'element';
+            if(obj){
+                var o = obj.dom || obj; 
+                return !!o.tagName || (/\[object html/i).test(OP.toString.apply(o)); 
+            }
+            return false;
         },
 
         isEvent : function(obj){
@@ -1677,6 +1677,10 @@
 
         isString : function(obj){
             return typeof obj == 'string';
+        },
+        
+        isPrimitive : function(v){
+            return Ext.isString(v) || Ext.isNumber(v) || Ext.isBoolean(v);
         },
         
         isDefined: defined
@@ -1699,7 +1703,9 @@
      * @copyright 2007-2009, Active Group, Inc. All rights reserved.
      * @desc Describes Detected Browser capabilities.
      */
-    Ext.capabilities = {
+    Ext.ns('Ext.capabilities');
+    var caps = Ext.capabilities;
+    Ext.apply(caps , {
             /**
              * @property {Boolean} hasActiveX True if the Browser support (and is enabled) ActiveX.
              */
@@ -1785,7 +1791,7 @@
             /**
              * @property {Boolean} hasWorkers True if the browser has support for threaded Workers.
              */
-            hasWorkers  : defined(window.Worker),
+            hasWorkers  : defined(window.Worker) || caps.hasGears,
             
             /**
              * @property {Boolean} hasOffline True if the browser has offline support. 
@@ -1999,7 +2005,7 @@ The testCodec function permits selective codec support testing:
 	            };
 	
 	        }()
-        };
+        });
         Ext.EventManager.on(window,   "beforeunload",  A.onUnload ,A,{single:true});
 })();
 

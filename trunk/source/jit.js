@@ -196,8 +196,8 @@
             /**
              * @event timeout Fires when module {@link #load} or
              *        {@link #onAvailable} requests have timed out.
-             * @param {Ext.ux.ModuleManager}
-             *            this
+             * @param {Ext.ux.ModuleManager} this
+             * @param {Object/String} module module descriptor object or module name of the last pending module
              */
             "timeout" : true
         });
@@ -374,86 +374,85 @@
          *            modules A list of module names to monitor
          * @param {Function}
          *            callback The callback function called when all named
-         *            resources are available
+         *            resources are available or timeout
          * @param (Object)
          *            scope The execution scope of the callback
          * @param {integer}
          *            timeout The timeout value in milliseconds.
          */
 
-        onAvailable : function(modules, callback, scope, timeout, options) {
+        onAvailable : function(modules, callbackFn, scope, timeout, options) {
 
             if (arguments.length < 2) {
                 return false;
             }
 
-            var MM = this;
-            var block = {
+            var MM = this,
+                block = {
 
-                modules : new Array().concat(modules),
-                poll : function() {
-                    if (!this.polling)return;
-
-                    var cb = callback;
-                    var depends = (window.$JIT ? $JIT.depends : null) || {};
-
-                    var assert = this.modules.every( function(arg, index, args) {
-                        
-                           var modName = arg.replace('@',''),virtual = false, test=true;
-                              
-                           if(depends[modName] && 
-                             ((virtual = depends[modName].virtual || false) || 
-                               (Ext.isArray(depends[modName].depends && 
-                                  !!depends[modName].length
-                                )))){
-                               test = depends[modName].depends.every(arguments.callee);
-                               test = virtual ? test && ((MM.getModule(modName)||{}).loaded = true): test;
-                           }
-                           return test && (virtual || MM.loaded(modName) === true);
-                    });
-
-                    if (!assert && this.polling && !this.aborted) {
-                        this.poll.defer(50, this);
-                        return;
-                    }
-
-                    this.stop();
-                    Ext.isFunction(cb) && cb.call(scope, assert);
-
-                },
-
-                polling : false,
-
-                abort : function() {
-                    this.aborted = true;
-                    this.stop();
-                },
-
-                stop : function() {
-                    this.polling = false;
-                    this.timer && clearTimeout(this.timer);
-                    this.timer = null;
-                },
-
-                timer : null,
-
-                timeout : parseInt(timeout || MM.timeout, 10) || 10000,
-
-                onTimeout : function() {
-                    this.abort();
-                    MM.fireEvent('timeout', MM, this.modules);
-                },
-
-                retry : function(timeout) {
-
-                    this.stop();
-                    this.polling = true;
-                    this.aborted = false;
-                    this.timer = this.onTimeout.defer(this.timeout, this);
-                    this.poll();
-                    return this;
-                }
-            };
+	                modules : new Array().concat(modules),
+	                poll : function() {
+	                    
+	                    var depends = (window.$JIT ? $JIT.depends : null) || {};
+	                    var assert = this.polling ? this.modules.every( function(arg, index, args) {
+	                           
+	                           var modName = arg.replace('@',''),virtual = false, test=true;
+	                           if(depends[modName] && 
+	                             ((virtual = depends[modName].virtual || false) || 
+	                               (Ext.isArray(depends[modName].depends && 
+	                                  !!depends[modName].length
+	                                )))){
+	                               test = depends[modName].depends.every(arguments.callee);
+	                               test = virtual ? test && ((MM.getModule(modName)||{}).loaded = true): test;
+	                           }
+	                           
+	                           test = test && (virtual || MM.loaded(modName) === true);
+	                           block.pendingModule = test ? null : MM.getModule(modName); 
+	                           return test;
+	                    }) : false;
+	
+	                    if (!assert && this.polling && !this.aborted) {
+	                        this.poll.defer(50, this);
+	                        return;
+	                    }
+	
+	                    this.stop();
+	                    Ext.isFunction(callbackFn) && callbackFn.call(scope, assert, this.timedOut, this.pendingModule);
+	
+	                },
+	
+	                polling : false,
+	
+	                abort : function() {
+	                    this.aborted = true;
+	                    this.stop();
+	                },
+	
+	                stop : function() {
+	                    this.polling = false;
+	                    this.timer && clearTimeout(this.timer);
+	                    this.timer = null;
+	                },
+	
+	                timer : null,
+	
+	                timeout : parseInt(timeout || MM.timeout, 10) || 10000,
+	
+	                onTimeout : function() {
+	                    this.timedOut = true;
+	                    this.abort();
+	                },
+	
+	                retry : function(timeout) {
+	
+	                    this.stop();
+	                    this.polling = true;
+	                    this.aborted = this.timedOut = false;
+	                    this.timer = this.onTimeout.defer(timeout || this.timeout, this);
+	                    this.poll();
+	                    return this;
+	                }
+	            };
             return block.retry();
         },
 
@@ -638,6 +637,7 @@
                     params : null,
                     data : null,
                     oav : null,
+                    timedOut : false,
                     unlisteners : new Array(),
                     MM : MM,
                     id : Ext.id(null, 'mm-task-'),
@@ -717,7 +717,7 @@
                         //Script Tags are re-usable in IE
                         A.SCRIPTTAG_POOL.push(C.element);
                     }else{
-                        Ext.Element.uncache(C.element);
+
                         C.element.remove();
                         //Other Browsers will not GBG-collect these tags, so help them along
                         if(d){
@@ -740,15 +740,16 @@
             var module = response.argument.module.module, 
                 opt = response.argument.module, 
                 executable = (!opt.proxied && module.extension == "js" && !opt.noExecute && opt.method !== 'DOM'), 
-                cbArgs = null;
+                cbArgs = null,
+                MM = this.MM;
             
-            module = this.MM.getModule(module.name);
+            module = MM.getModule(module.name);
             this.currentModule = module.name;
 
             if (!module.loaded) {
                 try {
 
-                    if (this.MM.fireEvent('beforeload', this.MM, module,
+                    if (MM.fireEvent('beforeload', MM, module,
                             response, response.responseText) !== false) {
 
                         Ext.apply(module, {
@@ -768,7 +769,7 @@
                         this.loaded.push(module);
                         var exception = executable
                                 && (!module.executed || opt.forced)
-                                ? this.MM.globalEval(response.responseText, opt.target)
+                                ? MM.globalEval(response.responseText, opt.target)
                                 : true;
                         if (exception === true) {
                             if (executable) {
@@ -836,7 +837,7 @@
                     module.apply(this, [this.result, null, this.loaded]);
                     continue;
                 }
-
+                
                 // setup possible single-use listeners for the current
                 // request chain
                 if (module.listeners) {
@@ -845,12 +846,13 @@
                     delete module.listeners;
 
                 }
-
+                if(this.timedOut)continue;
+                
                 var params = null, data = null, moduleObj;
                 options = module;
                 if (params = module.params) {
                     Ext.isFunction(params)&& (params = params.call(options.scope || window,options));
-                    Ext.isObject(params) && (params = Ext.urlEncode(params));
+                   (Ext.isObject(params) || Ext.isObject(params)) && (params = Ext.urlEncode(params));
                     module.params = data = params; // setup for possible post
                 }
 
@@ -1038,19 +1040,22 @@
         /**
          * @private
          */
-        onComplete : function(loaded) { // called with scope of last module
+        onComplete : function(loaded, timedOut, lastModule) { // called with scope of last module
                                         // in chain
-            var cb;
-
-            if (loaded) {
-
-                if (cb = this.options.callback) {
-                    cb.apply(this.options.scope || this, [this.result,
-                                    this.loaded, this.executed]);
-                }
-                this.MM.fireEvent('complete', this.MM, this.result,
-                        this.loaded, this.executed);
+            var cb = this.options.callback,
+                MM = this.MM;
+            
+            this.timedOut = !!timedOut;
+            
+            if(loaded){
+	            cb && cb.apply(this.options.scope || this, [this.result, this.loaded, this.executed]);
+                MM.fireEvent('complete', MM, this.result, this.loaded, this.executed);
+                
+            }else if(this.timedOut){
+                cb && cb.apply(this.options.scope || this, [this.result, this.loaded, this.executed]);
+                MM.fireEvent('timeout', MM, lastModule , this.executed);
             }
+            
 
             // cleanup single-use listeners from the previous request chain
             if (this.unlisteners) {
