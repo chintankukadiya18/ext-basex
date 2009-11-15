@@ -1,7 +1,7 @@
  /* global Ext */
 
  /**
-    jit.js 1.2
+    jit.js 1.4.1
   ************************************************************************************
 
    $JIT [Dynamic Resource loader (basex 3.1+ support required)]
@@ -49,7 +49,7 @@
     
     /**
      * @class Ext.ux.ModuleManager
-     * @version 1.2
+     * @version 1.3
      * ***********************************************************************************
      * @author Doug Hendricks. doug[always-At]theactivegroup.com 
      * @copyright 2007-2008, Active Group, Inc. All rights reserved.
