@@ -1047,7 +1047,7 @@
 	            cb && cb.apply(this.options.scope || this, [this.result, this.loaded, this.executed]);
                 MM.fireEvent('complete', MM, this.result, this.loaded, this.executed);
                 
-            }else if(this.timedOut){
+            }else if(this.active && this.timedOut){
                 cb && cb.apply(this.options.scope || this, [this.result, this.loaded, this.executed]);
                 MM.fireEvent('timeout', MM, lastModule , this.executed);
             }
