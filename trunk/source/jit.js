@@ -1418,6 +1418,9 @@
 
     $JIT.provide('jit','ext-basex');
 
+    /*
+     * 
+      Sample global loadexception handler
     $JIT.on('loadexception',function(loader, module , ecode, title){
       
       if(!ecode)return;
@@ -1434,7 +1437,8 @@
           }
       }
     });
-
+   */
+   
     /* Add 'require/JIT' support (synchronous only) permitting progressive loads to lazy-loaded component configs
      new Ext.Panel({
         layout:'fit',
