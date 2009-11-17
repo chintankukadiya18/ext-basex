@@ -118,15 +118,11 @@
 
         this.addEvents({
             /**
-             * @event loadexception Fires when any exception is
-             *        raised returning false prevents any subsequent
-             *        pending module load requests
-             * @param {Ext.ux.ModuleManager}
-             *            this
-             * @param {String}
-             *            module -- the module object
-             * @param {Object}
-             *            error -- An error object containing:
+             * @event loadexception Fires when any exception is raised. 
+             *     Returning false prevents any subsequent pending module load requests
+             * @param {Ext.ux.ModuleManager} this
+             * @param {String} module -- the module object
+             * @param {Object} error -- An error object containing:
              *            httpStatus, httpStatusText, error object
              */
             "loadexception" : true,
@@ -690,11 +686,11 @@
             var cb, C;
             
             if (C = currModule) {
-                var res = this.MM.fireEvent.apply(this.MM, [
+                var res = this.timedOut || this.MM.fireEvent.apply(this.MM, [
                                 (success ? 'load' : 'loadexception'),
                                 this.MM, C ].concat(args || []));
                 
-                success || (this.active = (res !== false));
+                success || (this.active = (!this.timedOut && res !== false));
 
                 // Notify other pending async listeners
                 if (this.active && Ext.isArray(C.notify)) {
@@ -811,11 +807,11 @@
         failure : function(response) {
            
             var module = response.argument.module.module, opt = response.argument.module;
-            module.contentType = response.contentType || ''
+            module.contentType = response.contentType || '';
             this.currentModule = module.name;
             this.result = module.pending = false;
 
-            this.doCallBacks(opt, this.result, module, [{
+            this.doCallBacks(opt, this.result = false, module, [{
                         error : (this.lastError = response.fullStatus.error),
                         httpStatus : response.status,
                         httpStatusText : response.statusText
@@ -846,7 +842,7 @@
                     delete module.listeners;
 
                 }
-                if(this.timedOut)continue;
+                
                 
                 var params = null, data = null, moduleObj;
                 options = module;
@@ -888,7 +884,7 @@
                                                     : 'SCRIPT')
                                             : options.method,
                                         url, 
-                                        {
+                                        options.callback = {
 	                                        success : this.success,
 	                                        failure : this.failure,
 	                                        scope : this,
@@ -1423,14 +1419,16 @@
     $JIT.provide('jit','ext-basex');
 
     $JIT.on('loadexception',function(loader, module , ecode, title){
-
+      
       if(!ecode)return;
       var ec = ecode.error || ecode;
       var msg = ec? ec.message || ec.description || ec.name || ecode: null;
 
       if(msg){
+          msg.httpStatusText && ( msg = msg.httpStatus + ' ' + msg.httpStatusText);
+          title = title || (module ? 'Error retrieving '+ (module.name || module) : '');
           if(Ext.MessageBox){
-              Ext.MessageBox.alert(title||'unknown',msg);
+              Ext.MessageBox.alert(title ,msg);
           } else {
               alert((title?title+'\n':'')+msg );
           }
