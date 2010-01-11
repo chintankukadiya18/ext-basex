@@ -1,6 +1,6 @@
 /* global Ext */
 /**
- * @version 4.1
+ * @version 4.1.1
  * ***********************************************************************************
  *
  * Ext.lib.Ajax enhancements:
@@ -35,7 +35,7 @@
  *
  * ***********************************************************************************
  * @author Doug Hendricks. doug[always-At]theactivegroup.com 
- * @copyright 2007-2009, Active Group, Inc. All rights reserved.
+ * @copyright 2007-2010, Active Group, Inc. All rights reserved.
  * ***********************************************************************************
  *
  * @license <a href="http://www.gnu.org/licenses/gpl.html">GPL 3.0</a>
@@ -1339,8 +1339,8 @@
         compact : function(deep) { // Remove null, undefined array
                                     // elements
             var a = new Array();
-            this.forEach(function(v) {
-                (v === null || v === undefined) || a.push(deep && Ext.isArray(v) ? v.compact() : v);
+            this.forEach(function(v, i) {
+                (v === null || v === undefined) || !(i in this) || a.push(deep && Ext.isArray(v) ? v.compact() : v);
             }, this);
             return a;
         },
@@ -1400,13 +1400,30 @@
             });
             return a;
         },
-        
-        first : function() {
-            return this[0];
+        /**
+         * Return the first Array element
+         * @argument asDefined True to return the first defined element
+         */
+        first : function(asDefined) {
+            var i =0;
+            if(asDefined){
+                var l = this.length;
+                //get the first defined Array element value
+                while(i<l && !(i in this )){i++;}
+            }
+            return this[i];
         },
-
-        last : function() {
-            return this[this.length - 1];
+        /**
+         * Return the last Array element
+         * @argument asDefined True to return the last defined element
+         */
+        last : function(asDefined) {
+            var i = this.length - 1;
+            if(asDefined){
+                //get the first defined Array element value
+                while(i > 0 && !(i in this )){i--;}
+            }
+            return this[i];
         },
 
         clear : function() {
@@ -1429,6 +1446,22 @@
             return t;
 
         },
+        
+        reduce : function(block, initialValue) {
+		    var l = this.length, i=0, previous, current;
+		    if(!l){
+               return initialValue || null;
+            }
+		    //get initialValue or the first defined Array element value
+		    previous = initialValue || this.first(true);
+		
+		    this.forEach(function(val, idx, arr) {
+		        current = val;
+		        previous = block.apply(null, [previous, current, idx, arr]);
+		    });
+		
+		    return previous;
+		},
         
          /*
          * Array forEach Iteration based on previous work by: Dean Edwards
@@ -1692,20 +1725,22 @@
       * @constructor
       * @description Ext Adapter extensions
       */
-          
-    /**
-     * @class Ext.capabilities
-     * @singleton
-     * @version 4.0
-     * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
-     * @license <a href="http://www.gnu.org/licenses/gpl.html">GPL 3.0</a> 
-     * @author Doug Hendricks. Forum ID: <a href="http://extjs.com/forum/member.php?u=8730">hendricd</a> 
-     * @copyright 2007-2009, Active Group, Inc. All rights reserved.
-     * @desc Describes Detected Browser capabilities.
-     */
     Ext.ns('Ext.capabilities');
-    var caps = Ext.capabilities;
-    Ext.apply(caps , {
+    var caps = Ext.capabilities;   
+    Ext.onReady(function(){
+	    /**
+	     * @class Ext.capabilities
+	     * @singleton
+	     * @version 4.1.1
+	     * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
+	     * @license <a href="http://www.gnu.org/licenses/gpl.html">GPL 3.0</a> 
+	     * @author Doug Hendricks. Forum ID: <a href="http://extjs.com/forum/member.php?u=8730">hendricd</a> 
+	     * @copyright 2007-2010, Active Group, Inc. All rights reserved.
+	     * @desc Describes Detected Browser capabilities.
+	     */
+	    Ext.ns('Ext.capabilities');
+	    var caps = Ext.capabilities;
+	    Ext.apply(caps , {
             /**
              * @property {Boolean} hasActiveX True if the Browser support (and is enabled) ActiveX.
              */
@@ -1837,7 +1872,7 @@ The included <b>testMime</b> function permits selective mime-type testing as wel
             hasAudio   : function(){
                 
                 var aTag = !!document.createElement('audio').canPlayType,
-                    aAudio = ('Audio' in window) ? new Audio('') : {},
+                    aAudio = ('Audio' in window && window.Audio) ? new Audio('') : {},
 	                caps = aTag || ('canPlayType' in aAudio) ? 
                         { tag   : aTag, 
                          object : ('play' in aAudio),
@@ -2006,7 +2041,8 @@ The testCodec function permits selective codec support testing:
 	
 	        }()
         });
-        Ext.EventManager.on(window,   "beforeunload",  A.onUnload ,A,{single:true});
+   });
+   Ext.EventManager.on(window,   "beforeunload",  A.onUnload ,A,{single:true});
 })();
 
  // enumerate custom class properties (not prototypes unless protos==true)
