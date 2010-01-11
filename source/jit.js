@@ -1,14 +1,14 @@
  /* global Ext */
 
  /**
-    jit.js 1.4.1
+    jit.js 1.4.2
   ************************************************************************************
 
    $JIT [Dynamic Resource loader (basex 3.1+ support required)]
 
   ************************************************************************************
   * Author: Doug Hendricks. doug[always-At]theactivegroup.com
-  * Copyright 2007-2008, Active Group, Inc.  All rights reserved.
+  * Copyright 2007-2010, Active Group, Inc.  All rights reserved.
   ************************************************************************************
 
   License: ext-basex and $JIT are licensed under the terms of : GNU Open Source GPL 3.0 license:
@@ -1098,7 +1098,7 @@
                 forEach(map.depends||new Array() ,
                     function(module,index,dep){
                         //chain dependencies
-                        module.substr(0,1)=="@" ?
+                        Ext.isString(module) && module.substr(0,1)=="@" ?
                             c.call(this, module ):
                               (result = result.concat(module));
 
