@@ -1658,7 +1658,7 @@
        };
 
     
-    Ext.apply(Ext,{
+    Ext.applyIf(Ext,{
         overload : overload( overload,
            [
              function(fn){ return overload(null, fn);},
