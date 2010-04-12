@@ -77,8 +77,7 @@
             scope : null, // scope of callback
             suspended : false,
             progressive : false // if true, one queue item is dispatched per poll interval
-
-            });
+         });
         this.requests = new Array();
         this.pending = false;
         // assert/resolve to 0-9
@@ -178,16 +177,22 @@
     Ext.lib.Ajax.QueueManager = function(config) {
 
         Ext.apply(this, config || {}, {
-                    quantas : 10, // adjustable milliseconds deferred dispatch
-                                    // value
-                    priorityQueues : new Array(new Array(), new Array(),
-                            new Array(), new Array(), new Array(), new Array(),
-                            new Array(), new Array(), new Array(), new Array()), // iterable
-                                                                                    // array
-                                                                                    // (0-9)
-                                                                                    // of
-                                                                                    // prioritized
-                                                                                    // queues:
+                    quantas : 10, // adjustable milliseconds deferred dispatch value
+                    
+                    // array (0-9) of prioritized queues:
+                    priorityQueues : new Array(
+                        new Array(), 
+                        new Array(),
+                        new Array(), 
+                        new Array(), 
+                        new Array(), 
+                        new Array(),
+                        new Array(), 
+                        new Array(), 
+                        new Array(), 
+                        new Array()
+                     ), // iterable
+                                                                                    
                     queues : {}
                 });
     };
@@ -270,7 +275,7 @@
 
         dispatch   : function(){
             var qm = this, qmq = qm.queues;
-            var quit=(A.activeRequests > A.maxConcurrentRequests);
+            var quit=(A.activeRequests >= A.maxConcurrentRequests);
             while(A.pendingRequests && !quit){
 
                var disp = function(qName) {
@@ -278,7 +283,7 @@
 
                     while (q && !q.suspended && q.pending && q.requestNext()) {
 
-                        quit || (quit = A.activeRequests > A.maxConcurrentRequests);
+                        quit || (quit = A.activeRequests >= A.maxConcurrentRequests);
                         if(quit)break;
 
                         // progressive, take the first one off each queue only
@@ -292,7 +297,7 @@
                 forEach(this.priorityQueues, function(pqueue) {
                     // pqueue == array of queue names
                     !!pqueue.length && forEach(pqueue , disp, this);
-                    quit || (quit = A.activeRequests > A.maxConcurrentRequests);
+                    quit || (quit = A.activeRequests >= A.maxConcurrentRequests);
                     if(quit)return false;
                 }, this);
 
@@ -313,7 +318,7 @@
         defaultHeaders    : A.defaultHeaders || {},
         useDefaultXhrHeader  : !!A.useDefaultXhrHeader,
         defaultXhrHeader  : 'Ext.basex',
-        
+        conn              : A.conn || {},
         //Reusable script tag pool for IE.
         SCRIPTTAG_POOL    : [],
         _domRefs          : [],        
@@ -340,13 +345,11 @@
 	            var ndom = Ext.getDom(node);
 	            
 	            ndom && forEach(attributes || {}, function(value, attrib) {
-	                
 	                value && (attrib in ndom) && ndom.setAttribute(attrib, value);
 	            });
 	
 	            if (callback) {
 	                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback||{}], 0);
-	                
 	                Ext.isIE ? node.on('readystatechange', function(){
 	                    this.dom.readyState == 'loaded' && cb();    
 	                }) : node.on("load", cb);
@@ -374,10 +377,21 @@
 
         /**
          * @property maxConcurrentRequests
-         * Specify the maximum allowed during concurrent Queued browser (XHR) requests
+         * Specify the maximum allowed during concurrent Queued browser (XHR) requests to consider during queued operation
          * Note:   IE8 increases this limit to 6
          */
-        maxConcurrentRequests : Ext.isIE ? Ext.value(window.maxConnectionsPerServer, 2) : 4,
+        maxConcurrentRequests : (function(){
+            
+           var mc = 6;
+           if(Ext.isIE){ 
+               mc = Ext.value(window.maxConnectionsPerServer, 2);
+           }else if(Ext.isOpera){
+               mc = 4;
+           }else if(Ext.Safari){
+               mc  = Ext.isSafari4 ? 5 : 4;
+           }
+           return mc;
+        })(),
 
         /** set True as needed, to coerce IE to use older ActiveX interface
          */
@@ -448,7 +462,8 @@
         serializeForm : function(){ 
             var reSelect = /select-(one|multiple)/i,
                 reInput = /file|undefined|reset|button/i,
-                reChecks = /radio|checkbox/i;
+                reChecks = /radio|checkbox/i,
+                reSubmit = /submit/i;
         
 	        return function(form) {
 	            var fElements = form.elements || (document.forms[form] || Ext.getDom(form)).elements,
@@ -479,7 +494,7 @@
 	                    } else if(!reInput.test(type)) {
 	                        if(!(reChecks.test(type) && !element.checked) && !(type == 'submit' && hasSubmit)){
 	                            data += encoder(name) + '=' + encoder(element.value) + '&';
-	                            hasSubmit = /submit/i.test(type);
+	                            hasSubmit = reSubmit.test(type);
 	                        }
 	                    }
 	                }
@@ -526,7 +541,6 @@
 
             callback = callback || {};
             var responseObject = null;
-            o.isPart || A.activeRequests--;
             
             if (!o.status.isError) {
                 o.status = this.getHttpStatus(o.conn, isAbort, isTimeout);
@@ -587,6 +601,7 @@
             
             o && (o.conn = null);
             if(o && Ext.value(o.tId,-1)+1){
+                this.activeRequests--;
 	            if(this.poll[o.tId]){
 	                window.clearInterval(this.poll[o.tId]);
 	                delete this.poll[o.tId];
@@ -595,7 +610,9 @@
 	                window.clearInterval(this.timeout[o.tId]);
 		            delete this.timeout[o.tId];
 	            }
+                delete this.conn[o.tId];
             }
+            
         },
 
         /**
@@ -673,7 +690,7 @@
 
                     if (o.status.isOK
                             && 
-                             ( (!obj.responseXML && this.reCtypeXML.test(obj.contentType ))
+                             ( (!obj.responseXML && ( o.options.isXML || this.reCtypeXML.test(obj.contentType )))
                              || (obj.responseXML && obj.responseXML.childNodes.length === 0) )
                         ) {
 
@@ -710,7 +727,7 @@
 
                 if (o.options.isJSON || (this.reCtypeJSON && this.reCtypeJSON.test(headerObj[CTYPE] || ""))) {
                     try {
-                        Ext.isObject(obj.responseJSON) || 
+                        Ext.isObject(obj.responseJSON) || Ext.isArray(obj.responseJSON) || 
                             (obj.responseJSON = Ext.isFunction( this.decodeJSON ) && 
                                Ext.isString(obj.responseText)
                                 ? this.decodeJSON(obj.responseText)
@@ -832,13 +849,10 @@
                     cType || (cType = 'application/json; charset=utf-8');
                     method = 'POST';
                     data = (Ext.isArray(O.jsonData) || Ext.isObject(O.jsonData)) ? 
-                        Ext.encode(O.jsonData) : 
-                            O.jsonData;
+                        Ext.encode(O.jsonData) : O.jsonData;
                 }
                 if (data) {
-                    cType || (cType = this.useDefaultHeader
-                                    ? this.defaultPostHeader
-                                    : null);
+                    cType || (cType = this.useDefaultHeader ? this.defaultPostHeader : null);
                     cType && this.initHeader('Content-Type', cType, false);
                 }
 
@@ -992,11 +1006,12 @@
                 var r = o.conn;
                 
                 try {
-                    if(o.status.isError){ throw o.status.error };
+                    if(o.status.isError){ throw o.status.error; };
                     
                     A.activeRequests++;
                     r.open(method.toUpperCase(), uri, options.async, options.userId, options.password);
-                   
+                    
+                    
                     ('onreadystatechange' in r) && 
                         (r.onreadystatechange = this.onStateChange.createDelegate(this, [o, callback, 'readystate'], 0));
                     
@@ -1005,29 +1020,34 @@
                         
                     ('onprogress' in r) &&
                         (r.onprogress = this.onStateChange.createDelegate(this, [o, callback, 'progress'], 0));
-                        
-                    //IE8/other? evolving timeout callback support
-	                if(callback && callback.timeout){
-                        ('timeout' in r) && (r.timeout = callback.timeout);
-                        ('ontimeout' in r) && 
-                           (r.ontimeout = this.abort.createDelegate(this, [o, callback, true], 0));
-                        ('ontimeout' in r) ||
-                           // Timers for syncro calls won't work here, as it's a blocking call
-                           (options.async && (this.timeout[o.tId] = window.setInterval(
-                                function() {A.abort(o, callback, true);
-                            }, callback.timeout)));
-                    }
                     
-                    if (this.useDefaultXhrHeader && !options.xdomain) {
-	                    this.defaultHeaders['X-Requested-With'] ||
-	                        this.initHeader('X-Requested-With', this.defaultXhrHeader, true);
-	                }
-	                this.setHeaders(o);
-	                
+                    
 	                if (!this.events
-                            || this.fireEvent('beforesend', o, method, uri,
-                                    callback, postData, options) !== false) {
+                            || this.fireEvent('beforesend', o, method, uri, callback, postData, options) !== false) {
+                                
+                        //IE8/other? evolving timeout callback support
+	                    if(callback && callback.timeout){
+	                        ('timeout' in r) && (r.timeout = callback.timeout);
+	                        ('ontimeout' in r) && 
+	                           (r.ontimeout = this.abort.createDelegate(this, [o, callback, true], 0));
+	                        ('ontimeout' in r) ||
+	                           // Timers for syncro calls won't work here, as it's a blocking call
+	                           (options.async && (this.timeout[o.tId] = window.setInterval(
+	                                function() {A.abort(o, callback, true);
+	                            }, callback.timeout)));
+	                    }
+                        
+                        if (this.useDefaultXhrHeader && !options.xdomain) {
+	                        this.defaultHeaders['X-Requested-With'] ||
+	                            this.initHeader('X-Requested-With', this.defaultXhrHeader, true);
+	                    }
+	                    this.setHeaders(o);
+                                        
+                        this.conn[o.tId] = o;
                         r.send(postData || null);
+                    }else{
+                        this.releaseObject(o);
+                        return o;
                     }
                 } catch (exr) {
                     o.status.isError = true;
@@ -1043,24 +1063,27 @@
 
 
         abort : function(o, callback, isTimeout) {
-
-            o && Ext.apply(o.status,{
-                isAbort : !!!isTimeout,
-                isTimeout : !!isTimeout,
-                isError  : !!isTimeout || !!o.status.isError
-              }); 
-            if (o && o.queued && o.request) {
-                o.request.active = o.queued = false;
-                this.events && this.fireEvent('abort', o, callback);
-                return true;
-            } else if (o && this.isCallInProgress(o)) {
-                
-                if (!this.events || this.fireEvent(isTimeout ? 'timeout' : 'abort', o, callback)!== false){
-                    ('abort' in o.conn) && o.conn.abort();
-                    this.handleTransactionResponse(o, callback, o.status.isAbort, o.status.isTimeout);
-                }
-                return true;
-            } 
+        	
+        	if(o){
+        		o.status || (o.status={});
+        		Ext.apply(o.status,{
+	                isAbort : !!!isTimeout,
+	                isTimeout : !!isTimeout,
+	                isError  : !!isTimeout || !!o.status.isError
+	              }); 
+	            if (o.queued && o.request) {
+	                o.request.active = o.queued = false;
+	                this.events && this.fireEvent('abort', o, callback);
+	                return true;
+	            } else if ( this.isCallInProgress(o)) {
+	                
+	                if (!this.events || this.fireEvent(isTimeout ? 'timeout' : 'abort', o, callback)!== false){
+	                    ('abort' in o.conn) && o.conn.abort();
+	                    this.handleTransactionResponse(o, callback, o.status.isAbort, o.status.isTimeout);
+	                }
+	                return true;
+	            } 
+        	}
             return false;
         },
         
@@ -1381,6 +1404,7 @@
             }, this);
             return a;
         },
+        
         // search array values based on regExpression pattern returning
         // test (and optionally execute function(value,index) on test
         // before returned)
@@ -1656,7 +1680,11 @@
            return f;
 
        };
-
+    var objTypes = {
+        array : '[object Array]',
+        object : '[object Object]',
+        complex : /Object\]|Array\]/
+    };
     
     Ext.applyIf(Ext,{
         overload : overload( overload,
@@ -1678,6 +1706,10 @@
 
         isObject:function(obj){
             return !!obj && OP.toString.apply(obj) == '[object Object]';
+        },
+        
+        isComplex : function(obj){
+           return !!obj && objTypes.complex.test(OP.toString.apply(obj));
         },
         
         isNumber: function(obj){
@@ -1973,7 +2005,7 @@ The testCodec function permits selective codec support testing:
             hasInputType : function(type){
               var el = document.createElement("input");
               if(el){
-                 try{ el.setAttribute("type", type)}catch(e){};
+                 try{ el.setAttribute("type", type);}catch(e){};
                  return el.type !== 'text';
               }
               return false;
@@ -1998,7 +2030,7 @@ The testCodec function permits selective codec support testing:
                   'load':'img',
 	              'error':'img',
                   'abort':'img'
-	            }
+	            };
 	            //Cached results
 	            var cache = {},
                     onPrefix = /^on/i,
