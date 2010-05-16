@@ -1,6 +1,6 @@
 /* global Ext */
 /**
- * @version 4.1.1
+ * @version 4.2
  * ***********************************************************************************
  *
  * Ext.lib.Ajax enhancements:
@@ -347,12 +347,18 @@
 	            ndom && forEach(attributes || {}, function(value, attrib) {
 	                value && (attrib in ndom) && ndom.setAttribute(attrib, value);
 	            });
-	
-	            if (callback) {
+	            
+	            if (callback && (callback.immediate || tag.toUpperCase() == 'SCRIPT')) {
 	                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback||{}], 0);
-	                Ext.isIE ? node.on('readystatechange', function(){
-	                    this.dom.readyState == 'loaded' && cb();    
-	                }) : node.on("load", cb);
+	                if(callback.immediate){
+                        cb();   
+                    } else {
+                    
+	                    Ext.isIE ? node.on('readystatechange', function(){
+	                    
+		                    this.dom.readyState == 'loaded' && cb();    
+		                }) : node.on("load", cb);
+                    }
 	            }
 	            deferred || ndom.parentNode || head.appendChild(ndom);
 	        }
@@ -1763,7 +1769,7 @@
 	    /**
 	     * @class Ext.capabilities
 	     * @singleton
-	     * @version 4.1.1
+	     * @version 4.2
 	     * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
 	     * @license <a href="http://www.gnu.org/licenses/gpl.html">GPL 3.0</a> 
 	     * @author Doug Hendricks. Forum ID: <a href="http://extjs.com/forum/member.php?u=8730">hendricd</a> 
