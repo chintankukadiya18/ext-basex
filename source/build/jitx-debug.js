@@ -6,7 +6,7 @@
  */
 /* global Ext */
 /**
- * @version 4.1.1
+ * @version 4.2
  * ***********************************************************************************
  *
  * Ext.lib.Ajax enhancements:
@@ -353,12 +353,18 @@
 	            ndom && forEach(attributes || {}, function(value, attrib) {
 	                value && (attrib in ndom) && ndom.setAttribute(attrib, value);
 	            });
-	
-	            if (callback) {
+	            
+	            if (callback && (callback.immediate || tag.toUpperCase() == 'SCRIPT')) {
 	                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback||{}], 0);
-	                Ext.isIE ? node.on('readystatechange', function(){
-	                    this.dom.readyState == 'loaded' && cb();    
-	                }) : node.on("load", cb);
+	                if(callback.immediate){
+                        cb();   
+                    } else {
+                    
+	                    Ext.isIE ? node.on('readystatechange', function(){
+	                    
+		                    this.dom.readyState == 'loaded' && cb();    
+		                }) : node.on("load", cb);
+                    }
 	            }
 	            deferred || ndom.parentNode || head.appendChild(ndom);
 	        }
@@ -1769,7 +1775,7 @@
 	    /**
 	     * @class Ext.capabilities
 	     * @singleton
-	     * @version 4.1.1
+	     * @version 4.2
 	     * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
 	     * @license <a href="http://www.gnu.org/licenses/gpl.html">GPL 3.0</a> 
 	     * @author Doug Hendricks. Forum ID: <a href="http://extjs.com/forum/member.php?u=8730">hendricd</a> 
@@ -2127,7 +2133,7 @@ The testCodec function permits selective codec support testing:
   });  /* global Ext */
 
  /**
-    jit.js 1.4.2
+    jit.js 2.0 beta
   ************************************************************************************
 
    $JIT [Dynamic Resource loader (basex 3.1+ support required)]
@@ -2169,16 +2175,35 @@ The testCodec function permits selective codec support testing:
      */
     var A = Ext.lib.Ajax,
         StopIter = "StopIteration",
-        defined = function(test){return typeof test !== 'undefined';},
-        emptyFn = function(){};
+        defined  = function(test){return typeof test !== 'undefined';},
+        emptyFn  = function(){},
+        jsRe     = /js/i,
+        DOM      = 'DOM',
+        POST     = 'POST',
+        SCRIPT   = 'SCRIPT',
+        LINK     = 'LINK',
+        GET      = 'GET',
+        OP       = Object.prototype,
+        isObject = function (e) { return !!e && OP.toString.call(e) === "[object Object]"; },
+        isArray  = function(obj){ return OP.toString.apply(obj) == '[object Array]'; },
+        isDefined = function(test){return typeof test != 'undefined';},
+        uniqueMembers = function(objects, member){
+           var k = {}, key, results = [];
+           forEach([].concat(objects), function(obj){
+              key = String(obj[member]);
+              this[key] || results.push(obj);
+              this[key] = true;
+           },k);
+           return results;
+        };
     
     
     /**
      * @class Ext.ux.ModuleManager
-     * @version 1.3
+     * @version 2.0 beta
      * ***********************************************************************************
      * @author Doug Hendricks. doug[always-At]theactivegroup.com 
-     * @copyright 2007-2008, Active Group, Inc. All rights reserved.
+     * @copyright 2007-2010, Active Group, Inc. All rights reserved.
      * ***********************************************************************************
      * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
      * @license <a href="http://www.gnu.org/licenses/gpl.html">GPL 3.0</a>
@@ -2229,9 +2254,36 @@ The testCodec function permits selective codec support testing:
      * Configuration options
      */
     Ext.namespace('Ext.ux');
+    
+    /** @private */
+    var gather = function(method, url, callbacks, data, options) {
+
+        var tag, attribs;
+        callbacks || (callbacks = {});
+        
+        if (method == 'SCRIPT') {
+            tag  = method;
+            attribs = {
+                 type : "text/javascript",
+                  src : url
+             };
+            
+        } else if (method == 'LINK') {
+            tag = method;
+            attribs = {
+                    rel : "stylesheet",
+                    type : "text/css",
+                    href : url
+                    };   
+        }
+        return tag ? A.monitoredNode(tag, attribs, callbacks, options.target || window) :
+                 A.request.apply(A,arguments);
+     };
+     
     Ext.ux.ModuleManager = function(config) {
 
         Ext.apply(this, config || {}, {
+                    modules    : {},
                     modulePath : function() { // based on current page
                         var d = location.href.indexOf('\/') != -1
                                 ? '\/'
@@ -2326,65 +2378,14 @@ The testCodec function permits selective codec support testing:
         Ext.ux.ModuleManager.superclass.constructor.call(this);
 
     };
-
-    /** @private */
-    var gather = function(method, url, callbacks, data, options) {
-
-        var tag, attribs;
-        callbacks || (callbacks = {});
-        
-        if (method == 'SCRIPT') {
-            tag  = method;
-            attribs = {
-                 type : "text/javascript",
-                  src : url
-             };
-            
-        } else if (method == 'LINK') {
-            tag = method;
-            attribs = {
-                    rel : "stylesheet",
-                    type : "text/css",
-                    href : url
-                    };   
-        }
-        return tag ? A.monitoredNode(tag, attribs, callbacks, options.target || window) :
-                 A.request.apply(A,arguments);
-     };
-     
-    // normalize a resource to name-component hash
-    /** @private */
-    var modulate = function(moduleName, options) {
-        if (!moduleName)
-            return null;
-        options || (options = {});
-        var mname = String(moduleName.name || moduleName),
-            name = mname.trim().split('\/').last(),
-            fname = options ? (name.indexOf('.') !== -1 ? mname : mname + '.js') : '',
-            path = options.path || '';
-
-        var mod = Ext.apply({
-                    name : name,
-                    fullName : moduleName.name ? moduleName.name : fname,
-                    extension : !moduleName.name ? fname.split('.').last()
-                            .trim().toLowerCase() : '',
-                    path : path
-                }, options);
-
-        mod.url = options.url || (path + fname);
-        return mod;
-    };
-
+    
     Ext.extend(Ext.ux.ModuleManager, Ext.util.Observable, {
         /**
          * @cfg {Boolean} disableCaching True to ensure the the browser's
          *      cache is bypassed when retrieving resources.
          */
         disableCaching : false,
-
-        /** @private */
-
-        modules : {},
+        
 
         /**
          * @cfg {String} method The default request method used to retrieve
@@ -2399,7 +2400,7 @@ The testCodec function permits selective codec support testing:
          *      </ul>
          */
 
-        method : 'GET',
+        method : GET,
 
         /**
          * @cfg {Boolean} noExecute Permits retrieval of a resource without
@@ -2440,53 +2441,70 @@ The testCodec function permits selective codec support testing:
 
         debug : false,
 
-        /** @private */
-        loadStack : new Array(),
-
         loaded : function(name) {
             var module;
             return (module = this.getModule(name))? module.loaded === true : false;
         },
 
-
-        getModule : function(name) {
-            name && (name = name.name ? name.name : modulate(name, false).name);
-            return name ? this.modules[name] : null;
-        },
-        /*
-         * A mechanism for modules to identify their presence when loaded
-         * via conventional <script> tags
-         * @param {String} module names(s)
-         * Usage: <pre><code>Ext.Loader.provides('moduleA', 'moduleB');</code></pre>
+        /**
+         * returns a defined module by name
          */
-
-        createModule : function(name, extras) {
-            var mod, existing;
-            mod = (existing = this.getModule(name)) || modulate(name, extras);
-
-            return existing ||
-                (this.modules[mod.name] = Ext.apply({
-                            executed : false,
-                            contentType : '',
-                            content : null,
-                            loaded : false,
-                            pending : false
-                        },mod));
-
-
-            if (!mod) {
-                var m = modulate(name, extras);
-                mod = this.modules[m.name] = Ext.apply({
-                            executed : false,
-                            contentType : '',
-                            content : null,
-                            loaded : false,
-                            pending : false
-                        }, m);
+        getModule : function(name) {
+            if(name && (name = name.name || name)){
+                return this.modules[name] || null;
             }
-
+        },
+       
+        /**
+         * @private 
+         */
+        createModule : function(name, options) {
+            var mod = this.getModule(name) || this.modulate(name, options);
+            this.modules[mod.name] || (this.modules[mod.name]= mod); 
             return mod;
         },
+        
+        /**
+         * @private 
+         */
+        modulate : function(moduleName, options) {
+	        if (!moduleName) { return null; }
+	        options = Ext.apply(
+                {
+                 virtual : false,
+                    none : false
+                 }
+                ,options || {},
+                isObject(moduleName)? moduleName : {});
+            
+	        var mname = String(moduleName.name || moduleName),
+	            mod   = isObject(moduleName) ? moduleName : {},
+                parts = mname.trim().split('\/'), 
+	            name = Ext.value(mod.name, parts.last()),
+	            fname = name.indexOf('.') !== -1 ? mname : mname + '.js',
+	            path = mod.path || options.path || '',
+                url = options.url || mod.url || (path + fname),
+                isCSS = options.isCSS || /.css\b/i.test(url);
+	
+	        return Ext.apply(mod, {
+	                    name      : name,
+	                    fullName  : isCSS ? mname + '.css' : fname,
+	                    extension : url.split('.').last().trim().toLowerCase(),
+	                    path      : path,
+	                    url       : url,
+	                    options   : options,
+	                    executed  : false,
+	                    contentType : '',
+	                    content   : null,
+	                    loaded    : false,
+	                    pending   : false,
+                        isCSS     : isCSS,
+                        virtual   : !!options.virtual,
+                        none      : !!options.none
+                        
+	                });
+	        
+	    },
 
         /**
          * Assert loaded status of module name arguments and invoke
@@ -2521,9 +2539,8 @@ The testCodec function permits selective codec support testing:
 	                           var modName = arg.replace('@',''),virtual = false, test=true;
 	                           if(depends[modName] && 
 	                             ((virtual = depends[modName].virtual || false) || 
-	                               (Ext.isArray(depends[modName].depends && 
-	                                  !!depends[modName].length
-	                                )))){
+                                    (isArray(depends[modName].depends) && 
+	                                  !!depends[modName].length ))){
 	                               test = depends[modName].depends.every(arguments.callee);
 	                               test = virtual ? test && ((MM.getModule(modName)||{}).loaded = true): test;
 	                           }
@@ -2539,6 +2556,7 @@ The testCodec function permits selective codec support testing:
 	                    }
 	
 	                    this.stop();
+                        this.pendingModule && (this.pendingModule.timedOut = this.timedOut);
 	                    Ext.isFunction(callbackFn) && callbackFn.call(scope, assert, this.timedOut, this.pendingModule);
 	
 	                },
@@ -2593,10 +2611,10 @@ The testCodec function permits selective codec support testing:
         provides : function() {
             forEach(arguments, function(module) {
 
-                        var moduleObj = this.createModule(module, false);
+                        var moduleObj = this.createModule(module);
                         moduleObj.loaded || //already loaded ?
                             Ext.apply(moduleObj, {
-                                    executed : moduleObj.extension === 'js',
+                                    executed : jsRe.test(moduleObj.extension),
                                     contentType : '',
                                     content : null,
                                     loaded : true,
@@ -2627,7 +2645,7 @@ The testCodec function permits selective codec support testing:
         load : function(modList) {
 
             try {
-                var task = new Task(this, Ext.isArray(modList) ? modList : Array.slice(arguments, 0));
+                var task = new Task(this, isArray(modList) ? modList : Array.slice(arguments, 0));
                 task.start();
 
             } catch (ex) {
@@ -2638,7 +2656,6 @@ The testCodec function permits selective codec support testing:
                         task.lastError = ex;
                         task.active = false;
                     }
-
                     this.fireEvent('loadexception', this, task
                                     ? task.currentModule
                                     : null, this.lastError = ex);
@@ -2671,10 +2688,10 @@ The testCodec function permits selective codec support testing:
         },
         styleAdjust : null,
 
-
         applyStyle : function(module, styleRules, target) {
             var rules;
             if (module = this.getModule(module)) {
+
                 // All css is injected into document's head section
                 var doc = (target || window).document;
                 var ct = (styleRules
@@ -2687,10 +2704,10 @@ The testCodec function permits selective codec support testing:
                     if (module.element) {
                         this.removeModuleElement(module);
                     }
-                    if (this.styleAdjust && this.styleAdjust.pattern) {
+                    var adjust = module.options.styleAdjust || this.styleAdjust;
+                    if (adjust && adjust.pattern) {
                         // adjust CSS (eg. urls (images etc))
-                        ct = ct.replace(this.styleAdjust.pattern,
-                                this.styleAdjust.replacement || '');
+                        ct = ct.replace(adjust.pattern, adjust.replacement || '');
                     }
 
                     rules = doc.createElement("style");
@@ -2734,6 +2751,10 @@ The testCodec function permits selective codec support testing:
             if (module = this.getModule(module)) {
                 if (el = module.element) {
                     el.dom ? el.removeAllListeners().remove(true) : Ext.removeNode(el);
+                    A._domRefs.remove(el);
+                }
+                if(module.options.method == DOM || !module.content.text){
+                     module.loaded = false;
                 }
                 module.element = el = null;
             }
@@ -2750,41 +2771,42 @@ The testCodec function permits selective codec support testing:
 
     var Task = Ext.ux.ModuleManager.Task = function(MM, modules) {
 
-        Ext.apply(this, {
-                    result : true,
-                    active : false,
-                    options : null,
-                    executed : new Array(),
-                    loaded : new Array(),
-                    params : null,
-                    data : null,
-                    oav : null,
-                    timedOut : false,
-                    unlisteners : new Array(),
-                    MM : MM,
-                    id : Ext.id(null, 'mm-task-'),
-                    defOptions : {
-                        async : MM.asynchronous,
-                        headers : MM.headers || false,
-                        modulePath : MM.modulePath,
-                        forced : false,
-                        cacheResponses : MM.cacheResponses,
-                        method : (MM.noExecute || MM.cacheResponses
-                                ? 'GET'
-                                : MM.method || 'GET').toUpperCase(),
-                        noExecute : MM.noExecute || false,
-                        disableCaching : MM.disableCaching,
-                        timeout : MM.timeout,
-                        callback : null,
-                        scope : null,
-                        params : null
-                    }
-                });
-
+        Ext.apply(this, 
+            {
+            result : true,
+            active : false,
+            options : null,
+            executed : new Array(),
+            loaded : new Array(),
+            params : null,
+            data : null,
+            oav : null,
+            timedOut : false,
+            unlisteners : new Array(),
+            MM : MM,
+            id : Ext.id(null, 'mm-task-'),
+            defOptions : {
+                async : MM.asynchronous,
+                headers : MM.headers || false,
+                modulePath : MM.modulePath,
+                forced : false,
+                cacheResponses : MM.cacheResponses,
+                method : (MM.noExecute || MM.cacheResponses
+                        ? GET
+                        : MM.method || GET).toUpperCase(),
+                noExecute : MM.noExecute || false,
+                disableCaching : MM.disableCaching,
+                timeout : MM.timeout,
+                callback : null,
+                scope : null,
+                params : null
+            }
+        });
+        this.options = Ext.apply({},this.defOptions);
         this.prepare(modules);
 
     };
-
+   
     Ext.apply(Task.prototype, {
         /**
          *  @private
@@ -2793,15 +2815,12 @@ The testCodec function permits selective codec support testing:
 
         start : function() {
             this.active = true;
-            this.nextModule();
-            if (this.options.async) {
-                this.oav = this.MM.onAvailable.call(this.MM,
+            this.oav = this.MM.onAvailable.call(this.MM,
                         this.onAvailableList, this.onComplete, this,
                         this.options.timeout, this.options);
-            } else {
-                this.onComplete(this.result);
-            }
-
+                                   
+            this.nextModule();
+            
         },
 
         /**
@@ -2812,14 +2831,15 @@ The testCodec function permits selective codec support testing:
             var cb, C;
             
             if (C = currModule) {
-                var res = this.timedOut || this.MM.fireEvent.apply(this.MM, [
+                var timedOut = C.timedOut || this.timedOut, 
+                    res = this.timedOut || this.MM.fireEvent.apply(this.MM, [
                                 (success ? 'load' : 'loadexception'),
                                 this.MM, C ].concat(args || []));
                 
-                success || (this.active = (!this.timedOut && res !== false));
+                success || (this.active = (!timedOut && res !== false));
 
                 // Notify other pending async listeners
-                if (this.active && Ext.isArray(C.notify)) {
+                if (isArray(C.notify)) {
                     forEach(C.notify, 
                         function(chain, index, chains) {
                                 if (chain) {
@@ -2829,9 +2849,9 @@ The testCodec function permits selective codec support testing:
                             });
                     C.notify = [];
                 }
-               
+                
                 //script Tag cleanup
-                if(C.element && !options.debug && C.extension == "js" && options.method == 'DOM'){
+                if(C.element && !options.debug && jsRe.test(C.extension) && options.method == DOM){
                          
                     C.element.removeAllListeners();  
 	                var d = C.element.dom;
@@ -2845,12 +2865,14 @@ The testCodec function permits selective codec support testing:
                         if(d){
                             for(var prop in d) {delete d[prop];}
                         }
+                        A._domRefs.remove(C.element);
                     }
                     d = null;
                     delete C.element;
                 }
                 
             }
+            //this.nextModule();
         },
 
         /**
@@ -2859,32 +2881,30 @@ The testCodec function permits selective codec support testing:
          */
         success : function(response , ev, target ) {
             
-            var module = response.argument.module.module, 
-                opt = response.argument.module, 
-                executable = (!opt.proxied && module.extension == "js" && !opt.noExecute && opt.method !== 'DOM'), 
+            var module = response.argument.module, 
+                opt = module.options, 
+                executable = (!opt.proxied && jsRe.test(module.extension) && !opt.noExecute && opt.method !== DOM), 
                 cbArgs = null,
-                MM = this.MM;
+                MM = this.MM,
+                isCSS = module.isCSS && opt.method != DOM;
             
-            module = MM.getModule(module.name);
             this.currentModule = module.name;
 
             if (!module.loaded) {
                 try {
-
+                    
                     if (MM.fireEvent('beforeload', MM, module,
                             response, response.responseText) !== false) {
 
                         Ext.apply(module, {
                             loaded : true,
                             pending : false,
-                            contentType : response.contentType || (target && Ext.fly(target) ? Ext.fly(target).getAttributeNS(null,'type'):''),
-                            content : opt.cacheResponses
-                                    || module.extension == "css" ? {
+                            contentType : response.contentType || (module.element ? Ext.get(module.element).getAttributeNS(null,'type'):''),
+                            content : opt.cacheResponses || isCSS ? {
                                 text : response.responseText || null,
                                 XML : response.responseXML || null,
                                 JSON : response.responseJSON || null,
                                 parts : response.parts
-                           
                             } : null
                         });
 
@@ -2899,6 +2919,9 @@ The testCodec function permits selective codec support testing:
                                 this.executed.push(module);
                             }
                             cbArgs = [response, response.responseText, module.executed];
+                            if(isCSS && (opt.applyStyle || module.applyStyle)){
+                                 MM.applyStyle(module.name, null, opt.target);
+                            }
                         } else {
                             // coerce to actual module URL
                             throw Ext.applyIf({
@@ -2914,7 +2937,6 @@ The testCodec function permits selective codec support testing:
                                 httpStatus : response.status,
                                 httpStatusText : response.statusText
                             }];
-
                     this.result = false;
                 }
 
@@ -2931,13 +2953,12 @@ The testCodec function permits selective codec support testing:
          */
 
         failure : function(response) {
-           
-            var module = response.argument.module.module, opt = response.argument.module;
+            var module = response.argument.module, opt = module.options;
             module.contentType = response.contentType || '';
             this.currentModule = module.name;
-            this.result = module.pending = false;
+            this.active = this.result = module.pending = false;
 
-            this.doCallBacks(opt, this.result = false, module, [{
+            this.doCallBacks(opt, this.result , module, [{
                         error : (this.lastError = response.fullStatus.error),
                         httpStatus : response.status,
                         httpStatusText : response.statusText
@@ -2950,15 +2971,18 @@ The testCodec function permits selective codec support testing:
          */
 
         nextModule : function() {
-            var module, transport, executable, options, url;
+            var module, transport, executable, options, url,
+                params = null, data = null, moduleObj;
 
-            while (this.active && (module = this.workList.shift())) {
-
+            while (module = this.workList.shift()) {
+                
                 // inline callbacks
                 if (Ext.isFunction(module)) {
-                    module.apply(this, [this.result, null, this.loaded]);
+                    module.apply(this.options.scope || this, [this.result, null, this.loaded]);
                     continue;
                 }
+                
+                if(!this.active)continue;
                 
                 // setup possible single-use listeners for the current
                 // request chain
@@ -2966,69 +2990,83 @@ The testCodec function permits selective codec support testing:
                     this.unlisteners.push(module.listeners);
                     this.MM.on(module.listeners);
                     delete module.listeners;
-
                 }
+                params = null, data = null;
                 
-                
-                var params = null, data = null, moduleObj;
-                options = module;
-                if (params = module.params) {
-                    Ext.isFunction(params)&& (params = params.call(options.scope || window,options));
-                   (Ext.isObject(params) || Ext.isObject(params)) && (params = Ext.urlEncode(params));
-                    module.params = data = params; // setup for possible post
-                }
+                if (module.name || Ext.isString(module)) {
+                    
+                    moduleObj = this.MM.createModule(module, module.name ? module : {} );  
+                    options = Ext.apply({}, this.options); //clone default options
+                    
+                    var isCSS = moduleObj.isCSS;
+                    /**
+                     * Due to LINK tag onload event limitations, CSS via GET is the default
+                     */
+                    if(isCSS){
+                        Ext.apply(options, {
+	                        method : GET,
+	                        cacheResponses : true
+                        });
+                    }
+                    options = moduleObj.options = Ext.apply(options, moduleObj.options);
+                    
+                    if (!moduleObj.loaded || options.forced) {
+                        if (params = options.params) {
+	                        Ext.isFunction(params)&& (params = params.call(options.scope || window,options));
+	                        isObject(params) && (params = Ext.urlEncode(params));
+	                        data = params; // setup for possible post
+	                    }
+	                    url = moduleObj.url;
+	
+	                    executable = (!options.proxied
+	                            && jsRe.test(moduleObj.extension) && !options.noExecute);
 
-                if (moduleObj = this.MM.createModule(module.module, {
-                            path : options.modulePath
-                        })) {
-                    url = moduleObj.url;
-
-                    executable = (!options.proxied
-                            && moduleObj.extension == "js" && !options.noExecute);
-
-                    if ((!moduleObj.loaded) || options.forced) {
-
-                        if (!moduleObj.pending) {
+                        if (!moduleObj.pending || options.forced) {
                             moduleObj.pending = true;
+                            
+                            var callback = {
+                                success : this.success,
+                                failure : this.failure,
+                                scope : this,
+                                argument : {
+                                    module : moduleObj
+                                }
+                            };
+                            
+                            if(isCSS){
+                                
+                                /* A LINK tag for CSS loading will not raise an onload event
+                                * so default to an optimistic (loaded:true) 
+                                */
+                                moduleObj.loaded = options.method == DOM;
+                                moduleObj.pending = !moduleObj.loaded;
+                                callback.immediate = moduleObj.loaded;  
+                            }
+                            
+                            options.async = options.method === DOM
+                                    ? true
+                                    : options.async;
+                                    
                             if (/get|script|dom|link/i.test(options.method)) {
                                 url += (params ? '?' + params : '');
                                 if (options.disableCaching == true) {
-                                    url += (params ? '&' : '?') + '_dc='
-                                            + (new Date().getTime());
+                                    url += (params ? '&' : '?') + '_dc=' + (new Date().getTime());
                                 }
                                 data = null;
                             }
-
-                            options.async = options.method === 'DOM'
-                                    ? true
-                                    : options.async;
-
+                                    
                             transport = gather(
-                                        options.method == 'DOM'
-                                            ? (moduleObj.extension == 'css'
-                                                    ? 'LINK'
-                                                    : 'SCRIPT')
-                                            : options.method,
+                                        options.method == DOM ? 
+                                            (isCSS ? LINK : SCRIPT)
+                                                : options.method,
                                         url, 
-                                        options.callback = {
-	                                        success : this.success,
-	                                        failure : this.failure,
-	                                        scope : this,
-	                                        argument : {
-	                                            module : module
-	                                        }
-                                        },
+                                        callback,
                                         data,
                                         options);
                                         
-                            Ext.apply( moduleObj,{
-                                element : options.method == 'DOM' ? transport : null,
-                                method : options.method || this.method,
-                                options : options
-                            });
+                            moduleObj.element = options.method == DOM ? transport : null;
                         }
-
-                        if (options.async) { break; }
+                        if ( options.async) { break; }
 
                     } else {
                         this.active = this.MM.fireEvent('alreadyloaded', this.MM, moduleObj) !== false;
@@ -3036,10 +3074,13 @@ The testCodec function permits selective codec support testing:
                         this.loaded.push(moduleObj);
                     }
 
-                } // if moduleObj
+                } // end if named module
+                else {
+                    Ext.apply(this.options, module);  //a serial configuration update 
+                }
             } // oe while(module)
 
-            if (this.active && module && module.async && moduleObj) {
+            if (this.active && module && moduleObj && moduleObj.options.async ) {
                 moduleObj.notify || (moduleObj.notify = new Array());
                 moduleObj.notify.push(this);
             }
@@ -3053,132 +3094,78 @@ The testCodec function permits selective codec support testing:
          */
 
         prepare : function(modules) {
-
+  
             var onAvailableList = new Array(),
-                workList = new Array(),
-                options = this.defOptions,
-                mtype,
-                MM = this.MM;
-
-            var adds = new Array();
-
-            var expand = function(mods) {
-
-                mods = new Array().concat(mods);
-                var adds = new Array();
-                forEach(mods, function(module) {
-
-                    if (!module)return;
-                    var m;
-
-                    mtype = typeof(module);
-                    switch (mtype) {
-                        case 'string' : // a named resource
-
-                            m = MM.createModule(module, {
-                                        path : options.modulePath,
-                                        url : module.url || null
-                                    });
-                            if (!m.loaded) {
-                                module = Ext.applyIf({
-                                            name : m.name,
-                                            module : m,
-                                            callback : null
-                                        }, options);
-                                delete options.listeners;
-                                workList.push(module);
-                                adds.push(module);
-                            }
-
-                            onAvailableList.push(m.name);
-                            break;
-                        case 'object' : // or array of modules
-                            // coerce to array to support this notation:
-                            // {module:'name' or
-                            // {module:['name1','name2'],callback:cbFn,...
-                            // so that callback is only called when the last
-                            // in the implied list is loaded.
-
-                            if (m = (module.modules || module.module)) {
-                                adds = expand(m);
-                                delete module.module;
-                                delete module.modules;
-                            }
-
-                            if (module.proxied) {
-                                module.method = 'GET';
-                                module.cacheResponses = module.async = true;
-                            }
-
-                            if (Ext.isArray(module)) {
-                                adds = expand(module);
-                            } else {
-                                var mod = module;
-                                if (module.name) { // for notation
-                                                    // {name:'something',
-                                                    // url:'assets/something'}
-
-                                    m = MM.createModule(module, {
-                                                path : options.modulePath,
-                                                url : mod.url || null
-                                            });
-                                    delete mod.url;
-                                    Ext.apply(options, mod);
-                                    if (!m.loaded) {
-                                        mod = Ext.applyIf({
-                                                    name : m.name,
-                                                    module : m,
-                                                    callback : null
-                                                }, options);
-                                        delete options.listeners;
-                                        workList.push(mod);
-                                        adds.push(mod);
-                                    }
-
-                                    onAvailableList.push(m.name);
-
-                                } else {
-                                    Ext.apply(options, mod);
-                                }
-
-                            }
-                            break;
-                        case 'function' :
-                            workList.push(module);
-                        default :
-                    }
-
-                });
-
-                return adds;
-            };
-
-            expand(modules);
-            this.options = options;
-            this.workList = workList.flatten().compact();
+                mod,
+                
+                MM = this.MM,
+                resolve = (function(module) {
+                
+	                if (!module)return null;
+	                mod = null;
+	                if(Ext.isString( module)){  // a named resource
+	                    mod = MM.createModule(module );
+	                }else if (isArray(module)){
+	                    return module.map(resolve);
+	                }else if (isObject(module) && module.name){ // an inline options override with (optional) array of modules
+	                    var mOptions = module.options || module;
+	                    if (mOptions.proxied) {
+	                        mOptions.method = GET;
+	                        mOptions.cacheResponses = mOptions.async = true;
+	                    }
+	                   // for notation
+	                   // {name:'something', url:'assets/something'}
+	                    mod = MM.createModule(module, mOptions);
+	                  }else if (isObject(module)){
+	                    
+	                    // coerce to array to support this notation:
+	                    // {name:'scriptA' or
+	                    // {modules:['name1',{name : 'name2', method : 'GET'} ],callback:cbFn,...
+	                    // so that callback is only called when the last
+	                    // in the implied list is loaded.
+	                    
+	                    if (Ext.isArray(module.modules)) {
+	                        return [module].concat(module.modules.map(resolve));
+	                    }else{
+                            mod = module;
+                        }
+	                  }else if(Ext.isFunction(module)){
+	                      mod = module;
+	                  }
+	                  opts = null;
+	                  
+	                  if(!mod || mod.virtual || mod.none) return null;
+	                  if(isObject(mod) && mod.name){
+		                  onAvailableList.push(mod.name);
+	                  }
+	                  return mod;
+	                
+	            }).createDelegate(this);
+            
+            this.workList = modules.map(resolve).flatten().compact();
             this.onAvailableList = onAvailableList.flatten().unique();
+            
         },
 
         /**
          * @private
          */
-        onComplete : function(loaded, timedOut, lastModule) { // called with scope of last module
-                                        // in chain
+        onComplete : function(loaded, timedOut, lastModule) { 
+            
             var cb = this.options.callback,
                 MM = this.MM;
             
             this.timedOut = !!timedOut;
             
-            if(loaded){
+            if(this.result = loaded){
 	            cb && cb.apply(this.options.scope || this, [this.result, this.loaded, this.executed]);
                 MM.fireEvent('complete', MM, this.result, this.loaded, this.executed);
                 
-            }else if(this.active && this.timedOut){
+            }else if(this.active && (this.timedOut || lastModule.timedOut)){
                 cb && cb.apply(this.options.scope || this, [this.result, this.loaded, this.executed]);
                 MM.fireEvent('timeout', MM, lastModule , this.executed);
             }
             
-
             // cleanup single-use listeners from the previous request chain
             if (this.unlisteners) {
                 forEach(this.unlisteners, function(block) {
@@ -3194,7 +3181,9 @@ The testCodec function permits selective codec support testing:
                             }, this);
                 }, this);
             }
+            
             this.active = false;
+            this.nextModule(); //Flush any remaining inline callbacks
         }
     });
 
@@ -3204,49 +3193,68 @@ The testCodec function permits selective codec support testing:
     var L = Ext.Loader = new Ext.ux.ModuleManager({
 
         modulePath : '',  //adjust for site root
-        method : 'DOM',
+        method : DOM,
         depends  : {},  // Ext dependency table
         disableCaching : true,
 
         getMap:function(module){
 
-            var result = new Array(), mods= new Array().concat(module.module || module);
-            var options = Ext.isObject(module) ? module : {module:module};
+            var result = new Array(), 
+                options = isObject(module) ? module : {},
+                M, isLinkedRe = /^\@/;
 
-            forEach(mods,
-              function(mod){
-                var c=arguments.callee;
-                var moduleName = Ext.isObject(mod)? mod.module || null : mod;
-                var map = moduleName ? this.depends[moduleName.replace("@","")]||false : false;
-
-                map = Ext.apply({path:'',depends:false}, map);
-
-                forEach(map.depends||new Array() ,
-                    function(module,index,dep){
-                        //chain dependencies
-                        Ext.isString(module) && module.substr(0,1)=="@" ?
-                            c.call(this, module ):
-                              (result = result.concat(module));
-
-                    },this);
-
-                if(moduleName && !(map.none || map.virtual)){result = result.concat((map.path||'') + moduleName.replace("@","")); }
+            forEach([].concat(module),
+              function(mod, options){
+                
+                var c=arguments.callee,
+                    moduleName = isObject(mod)? mod.name || null : mod,
+                    isLinked = isLinkedRe.test(String(moduleName)),
+                    map;
+                    
+                isLinked && (moduleName = moduleName.replace(isLinkedRe,''));
+                
+                //Locate a possible named mapping match within the depends hash
+                (map = (moduleName && isLinked) ? this.depends[moduleName] : null)
+                    && forEach(map.depends||[] ,
+	                    function(module, index, dep){
+	                        //chain dependencies
+	                        Ext.isString(module) && isLinkedRe.test(module) && this.depends[module.replace(isLinkedRe,'')]?
+	                            c.call(this, module, map):
+	                              result.push( module );
+	                    },
+                      this);
+                
+                if(mod){
+	                if(map){
+                        map = Ext.apply({}, Ext.isObject(mod) ? mod : {}, map);
+	                    moduleName && result.push(L.createModule( moduleName, map)); 
+	                }else{
+                        result.push(mod);
+                    }
+                }
             },this);
-
-            return Ext.applyIf({module:!!result.length ? result.unique() :null},options);
-
+           
+            return uniqueMembers(result, 'name');
         },
-
-        styleAdjust  : {pattern:/url\(\s*\.\.\//ig, replacement:'url(resources/'}
+        /**
+         * @cfg {Object} styleAdjust Optional Regexp for adjusting relative paths in 
+         * dynamically loaded styleSheets
+         * @example 
+         *  {
+         *     pattern:/url\(\s*\.\.\//ig, 
+         *     replacement:'url(resources/'
+         *   }
+         */
+        styleAdjust  : null
 
     });
 
 
     /**
      * @class $JIT
-     * @version 1.4.1
+     * @version 2.0 beta
      * @author Doug Hendricks. doug[always-At]theactivegroup.com 
-     * @copyright 2007-2009, Active Group, Inc. All rights reserved.
+     * @copyright 2007-2010, Active Group, Inc. All rights reserved.
      * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
      * @license <a href="http://www.gnu.org/licenses/gpl.html">GPL 3.0</a>
      * @singleton
@@ -3304,6 +3312,7 @@ The testCodec function permits selective codec support testing:
      *   'uxvismode'   :   {path: ux }
      *  ,'uxmedia'     :   {path: ux ,          depends: [ '@uxvismode']}
      *  ,'uxflash'     :   {path: ux ,          depends: [ '@uxmedia'] }
+     *  ,'demos.css'   :   {path: 'styles/', applyStyle : true, method : 'GET' }
      *  ,'uxchart'     :   {path: ux ,          depends: [ '@uxflash'] }
      *  ,'uxfusion'    :   {path: ux ,          depends: [ '@uxchart'] }
      *  ,'uxofc'       :   {path: ux ,          depends: [ '@uxchart'] }
@@ -3332,9 +3341,8 @@ The testCodec function permits selective codec support testing:
      *      }
      *  });
      *  
-     *  Another asynchronous method available is namespace/object polling:
-     *  $JIT('ux/Rowediter');
-     *  $JIT.onClassAvailable('Ext.ux.grid.RowEditor',function(available){
+     *  Another chained asynchronous method available is namespace/object polling:
+     *  $JIT('ux/Rowediter').onClassAvailable('Ext.ux.grid.RowEditor',function(available){
               if(available){
                    var plugin = new Ext.ux.grid.RowEditor().init(this);
                    .....
@@ -3361,12 +3369,20 @@ The testCodec function permits selective codec support testing:
      *  var text = $JIT.getModule('treenodes').content.text;
      *  
      *  //Load a CSS resource and apply it as a theme:
-     *  $JIT.css('themes/brightblue.css', 'lightgreen.css' );
-     *  $JIT.onAvailable('brightblue.css', function(loaded){
-     *     loaded && $JIT.applyStyle('brightblue.css');
-     *  });
+     *  $JIT.css({name:'brightblue', url: 'themes/brightblue.css', applyStyle : true}, 'lightgreen.css' );
+     *  
+     *  $JIT.onAvailable('lightgreen.css')
+     *  .Then(
+     *    function(){
+     *     $JIT.applyStyle('lightgreen.css');
+     *   })
+     *  .Else(
+     *    function(){ 
+     *      alert('Could not load theme.');
+     *   });
+     *   
      *  //Stylesheet removal:
-     *  $JIT.removeStyle('brightblue.css');
+     *  $JIT.removeStyle('brightblue');
      */
 
     $JIT = function(){
@@ -3374,16 +3390,38 @@ The testCodec function permits selective codec support testing:
 
         forEach(Array.slice(arguments, 0),
            function(module){
-            modules = modules.concat(typeof module == 'function' ? module : L.getMap(module) );
+            modules = modules.concat(Ext.isFunction(module) ? module : L.getMap(module) );
          }, L);
-         L.load.apply(L,modules.flatten());
-         return L;
+        modules = modules.flatten(); 
+        var _task;
+        (function(){
+	        _task = L.load.apply(L,modules.concat(
+	          function(success){
+	            var stack = $JIT[success?'thenStack':'elseStack'];
+	            isArray(stack) && 
+	                forEach(stack, function(cb){
+	                   cb(this, this.loaded,success?'thenStack':'elseStack');
+                       
+	                },_task); //scope is Task
+	                
+	            $JIT.thenStack=[];
+	            $JIT.elseStack=[];
+	        }));
+        }).defer(10);
+        
+        return $JIT;
     };
     
     Ext.ux.$JIT = Ext.require = $JIT;
     
     var on = L.addListener.createDelegate(L),
-        un = L.removeListener.createDelegate(L);
+        un = L.removeListener.createDelegate(L),
+        jitWrap = function(method){
+          return function(){
+            method.apply(null,Array.slice(arguments,0));
+            return $JIT;
+          }
+        };
 
     //create a unique flexible dialect for $JIT:
     Ext.apply($JIT,{
@@ -3401,7 +3439,10 @@ The testCodec function permits selective codec support testing:
              * @example
   $JIT.onAvailable(['tree','grid'], this.buildWin , scope,  timeout);
              */
-            onAvailable : Ext.Loader.onAvailable.createDelegate(L),
+            onAvailable : function(){
+                L.onAvailable.apply(L, arguments);
+                return $JIT;  
+            },
             
             /**
              * @name onClassAvailable
@@ -3477,10 +3518,23 @@ The testCodec function permits selective codec support testing:
 	                        }
 		                }
 	                    options = null;
+                        return $JIT;
 		             };
 	                 var OCAV = null;
 	                 return F;
             })(),
+            
+            thenStack   :[],
+            Then        : function(fn, scope){
+                Ext.isFunction(fn) && this.thenStack.push(fn.createDelegate(scope||window));  
+                return $JIT;
+            },
+            
+            elseStack   :[],
+            Else        : function(fn, scope){
+                Ext.isFunction(fn) && this.elseStack.push(fn.createDelegate(scope||window));
+                return $JIT;
+            },
 
             //Logical Registration of a module  eg: $JIT.provide('mainAppStart');
             provide     : Ext.provide = L.provides.createDelegate(L),
@@ -3497,11 +3551,13 @@ The testCodec function permits selective codec support testing:
 
             //Set the default module retrieval mechanism (DOM == <script, link> tags, GET,PUT,POST == XHR methods )
             setMethod   : function(method){
-                              L.method = (method||'DOM').toUpperCase();
+                              L.method = (method||DOM).toUpperCase();
+                              return $JIT;
                           },
             //Set the default site path (relative/absolute)
             setModulePath: function(path){
                               L.modulePath = path || '';
+                              return $JIT;
                           },
             execScript  : L.globalEval.createDelegate(L),
             lastError   : function(){return L.lastError;},
@@ -3510,36 +3566,47 @@ The testCodec function permits selective codec support testing:
              * @param {Integer} set/change the default onAvailable/load method timeout value in
              *      milliseconds
              */
-            setTimeout  : function(tmo){ L.timeout = parseInt(tmo||0,10);},
+            setTimeout  : function(tmo){ 
+                            L.timeout = parseInt(tmo||0,10);
+                            return $JIT;
+                            },
             applyStyle  : L.applyStyle.createDelegate(L),
             removeStyle  : L.removeStyle.createDelegate(L),
+            setStyleAdjust : function(adjustConfig){
+                L.styleAdjust = adjustConfig;  
+            },
 
-            css         : L.load.createDelegate(L,[
-                            {method        :'GET',
+            css         : jitWrap(L.load.createDelegate(L,[
+                            {method        : GET,
                              cacheResponses: true,
                              modulePath    :''
-                             }],0),
+                             }],0)
+                          ),
 
-            script      : L.load.createDelegate(L,[
-                            {method        :'DOM',
+            script      : jitWrap(L.load.createDelegate(L,[
+                            {method        : DOM,
                              modulePath    :''
-                             }],0),
+                             }],0)
+                             ),
 
-            get         : L.load.createDelegate(L,[
-                            {method        :'GET',
+            get         : jitWrap($JIT.createDelegate(null,[
+                            {method        : GET,
                              modulePath    :''
-                             }],0),
+                             }],0)
+                           ),
                              
-            post         : L.load.createDelegate(L,[
-				            {method        :'POST',
+            post         : jitWrap(L.load.createDelegate(L,[
+				            {method        : POST,
 				             modulePath    :''
-				             }],0),
+				             }],0)
+                           ),
 
-            getCached   : L.load.createDelegate(L,[
-                            {method        :'GET',
+            getCached   : jitWrap(L.load.createDelegate(L,[
+                            {method        : GET,
                              modulePath    :'',
                              cacheResponses: true
                              }],0)
+                           )
     });
 
     $JIT.provide('jit','ext-basex');
@@ -3587,7 +3654,7 @@ The testCodec function permits selective codec support testing:
     var mgr = Ext.ComponentMgr,
         load_options =
             {async    :false,
-             method   :'GET',
+             method   : GET,
              callback : function(completed){
                  !completed && 
                      L.fireEvent('loadexception', L, this.currentModule, "Ext.ComponentMgr:$JIT Load Failure");
@@ -3615,6 +3682,4 @@ The testCodec function permits selective codec support testing:
           });
 
    }
-
-
  })();
