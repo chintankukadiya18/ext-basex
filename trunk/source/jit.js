@@ -621,7 +621,7 @@
                     el.dom ? el.removeAllListeners().remove(true) : Ext.removeNode(el);
                     A._domRefs.remove(el);
                 }
-                if(module.options.method == DOM || !module.content.text){
+                if(module.options.method == DOM || !module.content || !module.content.text){
                      module.loaded = false;
                 }
                 module.element = el = null;
