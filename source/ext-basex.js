@@ -342,22 +342,22 @@
 	            }else{
 	                node = Ext.get(doc.createElement(tag));
 	            }
-	            var ndom = Ext.getDom(node);
+	            var ndom = Ext.getDom(node),
+                    canEvent = Ext.capabilities.isEventSupported;
 	            
 	            ndom && forEach(attributes || {}, function(value, attrib) {
 	                value && (attrib in ndom) && ndom.setAttribute(attrib, value);
 	            });
-	            
 	            if (callback && (callback.immediate || tag.toUpperCase() == 'SCRIPT')) {
 	                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback||{}], 0);
 	                if(callback.immediate){
                         cb();   
-                    } else {
-                    
-	                    Ext.isIE ? node.on('readystatechange', function(){
-	                    
+                    } else if(canEvent('load', tag)){
+                        node.on("load", cb);
+                    }else if( canEvent('readystatechange', tag)){
+                        node.on('readystatechange', function(){
 		                    this.dom.readyState == 'loaded' && cb();    
-		                }) : node.on("load", cb);
+       	                });
                     }
 	            }
 	            deferred || ndom.parentNode || head.appendChild(ndom);
@@ -1690,9 +1690,27 @@
         array : '[object Array]',
         object : '[object Object]',
         complex : /Object\]|Array\]/
-    };
+    },
+    methodRE = /^(function|object)$/i;
     
     Ext.applyIf(Ext,{
+        
+        /**
+         * Returns true if an object's member reference is a callable function
+         * @argument {Object} object
+         * @argument {String} member The string name of the referenced object's member to be tested
+         * (Member should be limited to those universally implemented as methods) 
+         */
+        isHostMethod : function(object, member){
+            var t = typeof object[member];
+            return !!((methodRE.test(t) && object[member]) || t == 'unknown');
+        },
+        
+        isHostObjectProperty : function(object, member) {
+		    var t = typeof object[member];
+            return !!((methodRE.test(t) && object[member]));
+		},
+
         overload : overload( overload,
            [
              function(fn){ return overload(null, fn);},
@@ -1764,7 +1782,69 @@
       * @description Ext Adapter extensions
       */
     Ext.ns('Ext.capabilities');
-    var caps = Ext.capabilities;   
+    var caps = Ext.capabilities; 
+    /**
+     * 
+     * @param {String} type The eventName (without the 'on' prefix)
+     * @param {HTMLElement/Object/String} testEl (optional) A specific HTMLElement/Object to test against, otherwise a tagName to test against.
+     * based on the passed eventName is used, or DIV as default. (window and document objects are supported)
+     * @return {Boolean} True if the passed object supports the named event.
+     * @desc Determines whether a specified DOMEvent is supported by a given HTMLElement or Object.
+     * @example Does the &lt;script> tag support the load event?
+   Ext.capabilities.isEventSupported('load', document.createElement('script')); 
+     */  
+     caps.isEventSupported = function(){
+                var TAGNAMES = {
+                  'select':'input',
+                  'change':'input',
+                  'submit':'form',
+                  'reset':'form',
+                  'load':'img',
+                  'error':'img',
+                  'abort':'img'
+                };
+                //Cached results
+                var cache = {},
+                    onPrefix = /^on/i,
+                    //Get a tokenized string of the form nodeName:type
+                    getKey = function(type, el){
+                        var tEl = Ext.getDom(el);
+                        return (tEl ?
+                               (Ext.isElement(tEl) || Ext.isDocument(tEl) ?
+                                    tEl.nodeName.toLowerCase() :
+                                        el.self ? '#window' : el || '#object')
+                           : el || 'div') + ':' + type;
+                    };
+    
+                return function (evName, testEl) {
+                  evName = (evName || '').replace(onPrefix,'');
+                  var el, 
+                      isSupported = false,
+                      eventName = 'on' + evName,
+                      tag = (testEl ? testEl : TAGNAMES[evName]) || 'div',
+                      key = getKey(evName, tag);
+                  
+                  if(key in cache){
+                    //Use a previously cached result if available
+                    return cache[key];
+                  }
+                  el = Ext.isString(tag) ? document.createElement(tag): testEl;
+                  isSupported || (isSupported = window.Event && !!(String(evName).toUpperCase() in window.Event));
+                  if (!isSupported && el && Ext.isHostMethod(el, 'setAttribute')){
+                    isSupported = true;
+                    if (typeof el[eventName] == 'undefined') {
+                       el.setAttribute(eventName, 'return;');
+                       isSupported = Ext.isHostMethod(el, eventName);
+                    }
+                  }
+                  //save the cached result for future tests
+                  cache[key] = isSupported;
+                  el = null;
+                  return isSupported;
+                };
+    
+            }();
+            
     Ext.onReady(function(){
 	    /**
 	     * @class Ext.capabilities
@@ -1776,8 +1856,8 @@
 	     * @copyright 2007-2010, Active Group, Inc. All rights reserved.
 	     * @desc Describes Detected Browser capabilities.
 	     */
-	    Ext.ns('Ext.capabilities');
-	    var caps = Ext.capabilities;
+	    
+	    
 	    Ext.apply(caps , {
             /**
              * @property {Boolean} hasActiveX True if the Browser support (and is enabled) ActiveX.
@@ -2015,69 +2095,7 @@ The testCodec function permits selective codec support testing:
                  return el.type !== 'text';
               }
               return false;
-            },
-            
-            /**
-	         * 
-	         * @param {String} type The eventName (without the 'on' prefix)
-	         * @param {HTMLElement/Object/String} testEl (optional) A specific HTMLElement/Object to test against, otherwise a tagName to test against.
-	         * based on the passed eventName is used, or DIV as default. (window and document objects are supported)
-	         * @return {Boolean} True if the passed object supports the named event.
-             * @desc Determines whether a specified DOMEvent is supported by a given HTMLElement or Object.
-             * @example Does the &lt;script> tag support the load event?
-   Ext.capabilities.isEventSupported('load', document.createElement('script')); 
-	         */  
-	        isEventSupported : function(){
-	            var TAGNAMES = {
-	              'select':'input',
-                  'change':'input',
-	              'submit':'form',
-                  'reset':'form',
-                  'load':'img',
-	              'error':'img',
-                  'abort':'img'
-	            };
-	            //Cached results
-	            var cache = {},
-                    onPrefix = /^on/i,
-	                //Get a tokenized string of the form nodeName:type
-	                getKey = function(type, el){
-	                    var tEl = Ext.getDom(el);
-		                return (tEl ?
-	                           (Ext.isElement(tEl) || Ext.isDocument(tEl) ?
-	                                tEl.nodeName.toLowerCase() :
-	                                    el.self ? '#window' : el || '#object')
-	                       : el || 'div') + ':' + type;
-	                };
-	
-	            return function (evName, testEl) {
-                  evName = (evName || '').replace(onPrefix,'');
-                  var el, isSupported = false;
-                  var eventName = 'on' + evName;
-                  var tag = (testEl ? testEl : TAGNAMES[evName]) || 'div';
-	              var key = getKey(evName, tag);
-                  
-	              if(key in cache){
-	                //Use a previously cached result if available
-	                return cache[key];
-	              }
-	              
-	              el = Ext.isString(tag) ? document.createElement(tag): testEl;
-	              isSupported = (!!el && (eventName in el));
-	              
-	              isSupported || (isSupported = window.Event && !!(String(evName).toUpperCase() in window.Event));
-                  
-	              if (!isSupported && el) {
-	                el.setAttribute && el.setAttribute(eventName, 'return;');
-	                isSupported = Ext.isFunction(el[eventName]);
-	              }
-	              //save the cached result for future tests
-	              cache[key] = isSupported;
-	              el = null;
-	              return isSupported;
-	            };
-	
-	        }()
+            }
         });
    });
    Ext.EventManager.on(window,   "beforeunload",  A.onUnload ,A,{single:true});
