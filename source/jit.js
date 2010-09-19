@@ -1,7 +1,7 @@
  /* global Ext */
 
  /**
-    jit.js 2.0 beta
+    jit.js 2.0 
   ************************************************************************************
 
    $JIT [Dynamic Resource loader (basex 3.1+ support required)]
@@ -58,7 +58,7 @@
         uniqueMembers = function(objects, member){
            var k = {}, key, results = [];
            forEach([].concat(objects), function(obj){
-              key = String(obj[member]);
+              key = String(isDefined(obj[member]) ? obj[member]: obj);
               this[key] || results.push(obj);
               this[key] = true;
            },k);
@@ -253,7 +253,6 @@
          *      cache is bypassed when retrieving resources.
          */
         disableCaching : false,
-        
 
         /**
          * @cfg {String} method The default request method used to retrieve
@@ -267,22 +266,18 @@
          *      <li>PUT</li>
          *      </ul>
          */
-
         method : GET,
-
         /**
          * @cfg {Boolean} noExecute Permits retrieval of a resource without
          *      script execution of the results. This option may also be
          *      changed in-line during a {@link #load) operation.
          */
-
         noExecute : false,
         /**
          * @cfg {Boolean} asynchronous Sets the default behaviour for AJAX
          *      requests onlu This option may also be changed in-line
          *      (async: true) during a {@link #load) operation.
          */
-
         asynchronous : true,
 
         /**
@@ -292,21 +287,18 @@
          * This option may also be changed in-line during a
          * {@link #load) operation.
          */
-
         cacheResponses : false,
 
         /**
          * @cfg {Integer} default onAvailable/load method timeout value in
          *      milliseconds
          */
-
         timeout : 30000,
 
         /**
          * @cfg {Boolean} True retains the resulting content within each
          *      module object for debugging.
          */
-
         debug : false,
 
         loaded : function(name) {
@@ -371,7 +363,6 @@
                         none      : !!options.none
                         
 	                });
-	        
 	    },
 
         /**
@@ -472,10 +463,9 @@
          *            module names(s) Usage:
          *
          * <pre><code>
-         * Ext.Loader.provides('moduleA', 'moduleB');
+         * Ext.ResourceLoader.provides('moduleA', 'moduleB');
          * </code></pre>
          */
-
         provides : function() {
             forEach(arguments, function(module) {
 
@@ -489,7 +479,6 @@
                                     pending : false
                                 });
                     }, this);
-
         },
         /**
          * load external resources in dependency order alternate load
@@ -508,18 +497,12 @@
          *            args One or more module definitions, inline functions
          *            to be execute in sequential order
          */
-
-
         load : function(modList) {
-
             try {
                 var task = new Task(this, isArray(modList) ? modList : Array.slice(arguments, 0));
                 task.start();
-
             } catch (ex) {
-                
                 if (ex != StopIter) {
-
                     if (task) {
                         task.lastError = ex;
                         task.active = false;
@@ -529,7 +512,6 @@
                                     : null, this.lastError = ex);
                 }
             }
-
             return task;
         },
 
@@ -619,7 +601,7 @@
             if (module = this.getModule(module)) {
                 if (el = module.element) {
                     el.dom ? el.removeAllListeners().remove(true) : Ext.removeNode(el);
-                    A._domRefs.remove(el);
+                    A._domRefs && A._domRefs.remove(el);
                 }
                 if(module.options.method == DOM || !module.content || !module.content.text){
                      module.loaded = false;
@@ -675,7 +657,7 @@
 
     };
    
-    Ext.apply(Task.prototype, {
+    Ext.extend(Task, Object , {
         /**
          *  @private
          *
@@ -733,14 +715,14 @@
                         if(d){
                             for(var prop in d) {delete d[prop];}
                         }
-                        A._domRefs.remove(C.element);
+                        A._domRefs && A._domRefs.remove(C.element);
                     }
                     d = null;
                     delete C.element;
                 }
                 
             }
-            //this.nextModule();
+            this.nextModule();
         },
 
         /**
@@ -809,9 +791,9 @@
                 }
 
                 this.doCallBacks(opt, this.result, module, cbArgs);
-            } else {
+            } //else {
                 opt.async && this.nextModule();
-            }
+            //}
 
         },
 
@@ -934,6 +916,7 @@
                                         
                             moduleObj.element = options.method == DOM ? transport : null;
                         }
+                        
                         if ( options.async) { break; }
 
                     } else {
@@ -947,7 +930,7 @@
                     Ext.apply(this.options, module);  //a serial configuration update 
                 }
             } // oe while(module)
-
+            
             if (this.active && module && moduleObj && moduleObj.options.async ) {
                 moduleObj.notify || (moduleObj.notify = new Array());
                 moduleObj.notify.push(this);
@@ -965,10 +948,9 @@
   
             var onAvailableList = new Array(),
                 mod,
-                
                 MM = this.MM,
                 resolve = (function(module) {
-                
+                    
 	                if (!module)return null;
 	                mod = null;
 	                if(Ext.isString( module)){  // a named resource
@@ -984,7 +966,7 @@
 	                   // for notation
 	                   // {name:'something', url:'assets/something'}
 	                    mod = MM.createModule(module, mOptions);
-	                  }else if (isObject(module)){
+	                }else if (isObject(module)){
 	                    
 	                    // coerce to array to support this notation:
 	                    // {name:'scriptA' or
@@ -997,7 +979,7 @@
 	                    }else{
                             mod = module;
                         }
-	                  }else if(Ext.isFunction(module)){
+	                 }else if(Ext.isFunction(module)){
 	                      mod = module;
 	                  }
 	                  opts = null;
@@ -1058,7 +1040,7 @@
     //Enable local file access for IE
     Ext.lib.Ajax.forceActiveX = (Ext.isIE7 && document.location.protocol == 'file:');
 
-    var L = Ext.Loader = new Ext.ux.ModuleManager({
+    var L = Ext.ResourceLoader = new Ext.ux.ModuleManager({
 
         modulePath : '',  //adjust for site root
         method : DOM,
@@ -1101,7 +1083,7 @@
                     }
                 }
             },this);
-           
+            
             return uniqueMembers(result, 'name');
         },
         /**
@@ -1120,7 +1102,7 @@
 
     /**
      * @class $JIT
-     * @version 2.0 beta
+     * @version 2.0 
      * @author Doug Hendricks. doug[always-At]theactivegroup.com 
      * @copyright 2007-2010, Active Group, Inc. All rights reserved.
      * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
@@ -1271,12 +1253,10 @@
 	                   cb(this, this.loaded,success?'thenStack':'elseStack');
                        
 	                },_task); //scope is Task
-	                
 	            $JIT.thenStack=[];
 	            $JIT.elseStack=[];
 	        }));
-        }).defer(10);
-        
+        })();
         return $JIT;
     };
     
@@ -1524,8 +1504,7 @@
             {async    :false,
              method   : GET,
              callback : function(completed){
-                 !completed && 
-                     L.fireEvent('loadexception', L, this.currentModule, "Ext.ComponentMgr:$JIT Load Failure");
+                 completed || L.fireEvent('loadexception', L, this.currentModule, "Ext.ComponentMgr:$JIT Load Failure");
              },
              scope : L
         },
@@ -1542,9 +1521,10 @@
 
                var require= config.require || config.JIT;
                if(!!require){
-                   require = [load_options].concat(require).map( assert ).compact();
+                   require = ([].concat(require)).map( assert ).compact();
+                   
                    //This synchronous request will block until completed
-                   Ext.require.apply(Ext, require);
+                   $JIT([load_options].concat(require));
 
                }
           });
