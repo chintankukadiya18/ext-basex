@@ -480,7 +480,7 @@
 	                        name,
 	                        val,
 	                        data = '',
-	                        type;
+	                        type, hasValue;
 	            forEach(fElements, function(element) {
 	                name = element.name;
 	                type = element.type;
@@ -488,13 +488,8 @@
 	                    if(reSelect.test(type)){
 	                        forEach(element.options, function(opt) {
 	                            if (opt.selected) {
-	                                data += String.format("{0}={1}&",
-	                                     encoder(name),
-	                                     encoder(
-                                           opt.hasAttribute && opt.hasAttribute('value') &&
-                                              opt.getAttribute('value') !== null ? opt.value : opt.text
-                                             )
-                                       );
+                                    hasValue = opt.hasAttribute ? opt.hasAttribute('value') : opt.getAttributeNode('value').specified;
+	                                data += String.format("{0}={1}&", encoder(name), encoder( hasValue ? opt.value : opt.text));
 	                            }
 	                        });
 	                    } else if(!reInput.test(type)) {
@@ -863,7 +858,7 @@
                 }
 
                 // options.method prevails over any derived method.
-                return this.makeRequest(O.method || method, uri, cb, data, O);
+                return this.makeRequest(String(O.method || method).toUpperCase(), uri, cb, data, O);
             }
             return null;
 
@@ -945,15 +940,12 @@
                     };
 
                     window[o.cbName] = o.cb = function(content) {
-
+                        this.readyState = 4;
                         content && typeof(content)=='object' && (this.responseJSON = content);
                         this.responseText = content || null;
                         this.status = !!content ? 200 : 404;
-                        this.abort();
-                        this.readyState = 4;
                         Ext.isFunction(this.onreadystatechange) && this.onreadystatechange();
                         Ext.isFunction(this.onload) && this.onload();
-                        
                     }.createDelegate(o.conn);
 
                     o.conn.open = function() {
@@ -971,7 +963,7 @@
                             )) ;
                         
                         o.uri = params ? uri.split('?').first() + '?' + params : uri;
-
+                        
                         this.el = A.monitoredNode(
                                 f.tag || 'script', 
                                 {
@@ -979,7 +971,15 @@
                                     src : o.uri,
                                     charset : f.charset || options.charset || null
                                 },
-                                null,
+                                /*
+                                 * If the script tag returns a load signal,
+                                 * evaluate the response (if any) and set up
+                                 * status for an exception
+                                 */
+                                function(){     
+                                    this.status = !!this.responseText ? 200 : 504;
+                                    this.abort();
+                                }.createDelegate(o.conn),
                                 f.target, 
                                 true); //defer head insertion until send method
                         
@@ -1534,7 +1534,7 @@
                 // the object is a string
                 resolve = String;
                 
-            } else if (Ext.isNumber(object.length)) {
+            } else if (typeof object.length == 'number') {
                 // the object is array-like
                 resolve = Array;
             } 
@@ -1689,9 +1689,10 @@
     var objTypes = {
         array : '[object Array]',
         object : '[object Object]',
-        complex : /Object\]|Array\]/
+        complex : /object|array/i
     },
-    methodRE = /^(function|object)$/i;
+    methodRE = /^(function|object)$/i,
+    primitivesRe =/^(number|string|boolean)$/i;
     
     Ext.applyIf(Ext,{
         
@@ -1725,25 +1726,17 @@
         },
 
         isArray : function(obj){
-           return OP.toString.apply(obj) == '[object Array]';
+           return obj instanceof Array;
         },
 
-        isObject:function(obj){
-            return !!obj && OP.toString.apply(obj) == '[object Object]';
+        isObject : function(obj){
+            return !!obj && OP.toString.call(obj) == '[object Object]';
         },
         
         isComplex : function(obj){
-           return !!obj && objTypes.complex.test(OP.toString.apply(obj));
+           return !!obj && objTypes.complex.test(typeof obj);
         },
         
-        isNumber: function(obj){
-            return typeof obj == 'number' && isFinite(obj);
-        },
-        
-        isBoolean: function(obj){
-            return typeof obj == 'boolean';
-        },
-
         isDocument : function(obj){
             return OP.toString.apply(obj) == '[object HTMLDocument]' || (obj && obj.nodeType === 9);
         },
@@ -1761,15 +1754,12 @@
         },
 
         isFunction: function(obj){
-            return OP.toString.apply(obj) == '[object Function]';
-        },
-
-        isString : function(obj){
-            return typeof obj == 'string';
+            return typeof obj == 'function';
         },
         
         isPrimitive : function(v){
-            return Ext.isString(v) || Ext.isNumber(v) || Ext.isBoolean(v);
+            return primitivesRe.test(typeof v);
+            //return Ext.isString(v) || Ext.isNumber(v) || Ext.isBoolean(v);
         },
         
         isDefined: defined
@@ -1781,8 +1771,8 @@
       * @constructor
       * @description Ext Adapter extensions
       */
-    Ext.ns('Ext.capabilities');
-    var caps = Ext.capabilities; 
+    
+    var caps = Ext.capabilities = Ext.supports || {}; 
     /**
      * 
      * @param {String} type The eventName (without the 'on' prefix)
@@ -1846,6 +1836,8 @@
             }();
             
     Ext.onReady(function(){
+        
+        var testInput  = document.createElement('input');
 	    /**
 	     * @class Ext.capabilities
 	     * @singleton
@@ -1857,8 +1849,7 @@
 	     * @desc Describes Detected Browser capabilities.
 	     */
 	    
-	    
-	    Ext.apply(caps , {
+	    Ext.applyIf(caps , {
             /**
              * @property {Boolean} hasActiveX True if the Browser support (and is enabled) ActiveX.
              */
@@ -1965,6 +1956,12 @@
             hasBasex   : true,
             
             /**
+             * Support for the microData DOM API. 
+             * @property {Boolean} hasMicrodata
+             */
+            hasMicrodata : !!document.getItems,
+            
+            /**
              * 
              * @property {Boolean/Object} hasAudio
              * @desc Basic HTML5 Element support for the &lt;audio> tag and/or Audio object.
@@ -2064,39 +2061,42 @@ The testCodec function permits selective codec support testing:
                    return caps;
             }(),
             
+            hasInput : {
+                
+                 /**
+	             * @desc Basic HTML5 Input Element support for autofocus. 
+	             * @return {Boolean} 
+	             */    
+                autoFocus : 'autofocus' in testInput,
+                
+                /**
+	             * @desc Basic HTML5 Input Element support for placeholder 
+	             * @return {Boolean}
+	             */
+                placeholder : 'placeholder' in testInput
+                
+            },
+            
              /**
-             * @desc Basic HTML5 Input Element support for autofocus. 
-             * @return {Boolean} 
-             */
-            hasInputAutoFocus : function(){
-                return ('autofocus' in (document.createElement('input')));
-            }(),
-            
-            /**
-             * @desc Basic HTML5 Input Element support for placeholder 
-             * @return {Boolean}
-             */
-            hasInputPlaceHolder : function(){
-                return ('placeholder' in (document.createElement('input')));
-            }(),
-            
-            /**
              * 
-             * @param {String) type The input type to test for.
-             * @return {Boolean} 
              * @desc Does the HTML5 enabled browser support extended input types
-             * @example Typical input type tests:
              * search, number, range, color, tel, url, email, date, month, week, tine, datetime, datetime-local
              */
-            hasInputType : function(type){
-              var el = document.createElement("input");
-              if(el){
-                 try{ el.setAttribute("type", type);}catch(e){};
-                 return el.type !== 'text';
-              }
-              return false;
-            }
+            
+            hasInputs : function(){
+                var i = {};
+                Ext.each(['search', 'number', 'range', 'color', 'tel', 'url', 'email', 'date', 'month', 'week', 'time', 'datetime', 'datetime-local'],
+                  function(type){
+		                try{ testInput.setAttribute("type", type);}
+                        catch(e){}
+                        finally{
+		                  i[type] = testInput.type != 'text'; 
+                        }
+                  });
+                return i;
+            }()
         });
+        testInput = null;
    });
    Ext.EventManager.on(window,   "beforeunload",  A.onUnload ,A,{single:true});
 })();
