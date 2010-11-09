@@ -63,7 +63,11 @@
     var A = Ext.lib.Ajax,
         defined = function(test){return typeof test != 'undefined';},
         emptyFn = Ext.emptyFn || function(){},
-        OP = Object.prototype;
+        OP = Object.prototype,
+        trial = function(fn, scope, args){
+	          var args = Ext.isArray(args) ? args : Array.slice(arguments, 2);
+	          try{ return fn.apply(scope || fn, args);} catch(e){}
+        }; 
         
         
     Ext.lib.Ajax.Queue = function(config) {
@@ -274,8 +278,8 @@
          */
 
         dispatch   : function(){
-            var qm = this, qmq = qm.queues;
-            var quit=(A.activeRequests >= A.maxConcurrentRequests);
+            var qm = this, qmq = qm.queues,
+                quit=(A.activeRequests >= A.maxConcurrentRequests);
             while(A.pendingRequests && !quit){
 
                var disp = function(qName) {
@@ -328,15 +332,16 @@
         },
         
         /**
-	     * private -- <script and link> tag support
+	     * private -- dynamic <script and link> tag support (with event callback where supported)
 	     */
 	    monitoredNode : function(tag, attributes, callback, context, deferred) {
 	        
 	        var node = null, doc = (context || window).document,
-	            head = doc ? doc.getElementsByTagName("head")[0] : null;
+	            head = doc ? doc.getElementsByTagName("head")[0] : null,
+                isScript = String(tag).toUpperCase() == 'SCRIPT';
 	        
 	        if (tag && doc && head) {
-	            node = tag.toUpperCase() == 'SCRIPT' && !!A.SCRIPTTAG_POOL.length ? Ext.get(A.SCRIPTTAG_POOL.pop()) : null;
+	            node = isScript && !!A.SCRIPTTAG_POOL.length ? Ext.get(A.SCRIPTTAG_POOL.pop()) : null;
 	            if(node){
 	                node.removeAllListeners();
 	            }else{
@@ -348,19 +353,29 @@
 	            ndom && forEach(attributes || {}, function(value, attrib) {
 	                value && (attrib in ndom) && ndom.setAttribute(attrib, value);
 	            });
-	            if (callback && (callback.immediate || tag.toUpperCase() == 'SCRIPT')) {
-	                var cb = (callback.success || callback).createDelegate(callback.scope || null, [callback||{}], 0);
-	                if(callback.immediate){
-                        cb();   
-                    } else if(canEvent('load', tag)){
-                        node.on("load", cb);
+                
+                var callbacks = Ext.isFunction(callback) ? {success : callback} : callback || {},
+                    success = Ext.isFunction(callbacks.success) ? callbacks.success.createDelegate(callbacks.scope || callbacks.success, [callbacks], 0): null ,
+                    failure = Ext.isFunction(callbacks.failure) ? callbacks.failure.createDelegate(callbacks.scope || callbacks.failure, [callbacks], 0): null ;
+                
+	            if (success && !callbacks.immediate ) {
+	                
+	                if(canEvent('load', tag)){
+                        node.on("load", success);
                     }else if( canEvent('readystatechange', tag)){
                         node.on('readystatechange', function(){
-		                    this.dom.readyState == 'loaded' && cb();    
+		                    this.dom.readyState == 'loaded' && success();    
        	                });
                     }
-	            }
-	            deferred || ndom.parentNode || head.appendChild(ndom);
+                }
+                if(Ext.isFunction(failure) && canEvent('error', tag)){
+                    node.on('error', failure );  //signal failure if supported
+                }
+	            
+	            if(!deferred) {
+                    ndom.parentNode || head.appendChild(ndom);
+                    callbacks.immediate && success();   
+                }
 	        }
 	        A._domRefs.push(node);
 	        return node;
@@ -914,6 +929,7 @@
 		                        this.el = d = null;
                             },
                             _headers : {},
+                            
                             getAllResponseHeaders : function(){
                                 var out=[];
                                 forEach(this._headers,function(value, name){
@@ -976,10 +992,16 @@
                                  * evaluate the response (if any) and set up
                                  * status for an exception
                                  */
-                                function(){     
-                                    this.status = !!this.responseText ? 200 : 504;
-                                    this.abort();
-                                }.createDelegate(o.conn),
+                                { success : function(){     
+	                                    this.status = !!this.responseText ? 200 : 504;
+	                                    this.abort();
+	                               },
+                                  failure : function(){
+                                      this.status = 404;
+                                      this.abort();
+                                  },
+                                  scope : o.conn
+                                },
                                 f.target, 
                                 true); //defer head insertion until send method
                         
@@ -1016,8 +1038,7 @@
                     
                     A.activeRequests++;
                     r.open(method.toUpperCase(), uri, options.async, options.userId, options.password);
-                    
-                    
+                                        
                     ('onreadystatechange' in r) && 
                         (r.onreadystatechange = this.onStateChange.createDelegate(this, [o, callback, 'readystate'], 0));
                     
@@ -1671,10 +1692,10 @@
                ov[f.length|| 0] = f;
 
                f= function(){  //the proxy stub
-                  var o = arguments.callee._ovl;
-                  var fn = o[arguments.length] || o.base;
+                  var o = arguments.callee._ovl,
+                      fn = o[arguments.length] || o.base;
                   //recursion safety
-                  return fn && fn != arguments.callee ? fn.apply(this,arguments): undefined;
+                  return fn && fn != arguments.callee ? fn.apply(this, arguments): undefined;
                };
            }
            var fnA = [].concat(fn);
@@ -1759,7 +1780,6 @@
         
         isPrimitive : function(v){
             return primitivesRe.test(typeof v);
-            //return Ext.isString(v) || Ext.isNumber(v) || Ext.isBoolean(v);
         },
         
         isDefined: defined
@@ -1938,14 +1958,17 @@
             hasWorkers  : defined(window.Worker) || caps.hasGears,
             
             /**
-             * @property {Boolean} hasOffline True if the browser has offline support. 
+             * @property {Boolean} hasOffline True if the browser has offline support.
+             *
              */
-            hasOffline : defined(window.applicationCache),
-            
+            hasOffline : trial(defined, null, window, 'applicationCache')  || false,
+
             /**
-             * @property {Boolean} hasLocalStorage True if the browser has Local Storage support. 
+             * @property {Boolean} hasLocalStorage True if the browser has Local Storage support.
+             * disabling Cookies on Gecko will throw
              */
-            hasLocalStorage : defined(window.localStorage),
+            hasLocalStorage : trial(defined,null, window, 'localStorage') || false,
+
             
             /**
              * Basic HTML5 geolocation services support test 

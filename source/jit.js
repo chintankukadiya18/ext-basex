@@ -348,7 +348,7 @@
 	
 	        return Ext.apply(mod, {
 	                    name      : name,
-	                    fullName  : isCSS ? mname + '.css' : fname,
+	                    fullName  : isCSS ? mname  : fname,
 	                    extension : url.split('.').last().trim().toLowerCase(),
 	                    path      : path,
 	                    url       : url,
@@ -736,7 +736,7 @@
                 executable = (!opt.proxied && jsRe.test(module.extension) && !opt.noExecute && opt.method !== DOM), 
                 cbArgs = null,
                 MM = this.MM,
-                isCSS = module.isCSS && opt.method != DOM;
+                isCSS = module.isCSS; // && opt.method != DOM;
             
             this.currentModule = module.name;
 
@@ -803,6 +803,7 @@
          */
 
         failure : function(response) {
+            
             var module = response.argument.module, opt = module.options;
             module.contentType = response.contentType || '';
             this.currentModule = module.name;
@@ -853,7 +854,7 @@
                      * Due to LINK tag onload event limitations, CSS via GET is the default
                      */
                     if(isCSS){
-                        Ext.apply(options, {
+                        Ext.applyIf(options, {
 	                        method : GET,
 	                        cacheResponses : true
                         });
@@ -884,13 +885,11 @@
                             };
                             
                             if(isCSS){
-                                
                                 /* A LINK tag for CSS loading will not raise an onload event
                                 * so default to an optimistic (loaded:true) 
                                 */
-                                moduleObj.loaded = options.method == DOM;
-                                moduleObj.pending = !moduleObj.loaded;
-                                callback.immediate = moduleObj.loaded;  
+                                callback.immediate = moduleObj.loaded = options.method == DOM;
+                                moduleObj.pending = !callback.immediate;
                             }
                             
                             options.async = options.method === DOM
