@@ -1968,7 +1968,11 @@
              * disabling Cookies on Gecko will throw
              */
             hasLocalStorage : trial(defined,null, window, 'localStorage') || false,
-
+            
+            /**
+             * @property {Boolean} hasDeviceAcceleration True if the browser has device acceleration detection abilities.
+             */
+            hasDeviceAcceleration : defined(window.DeviceMotionEvent),
             
             /**
              * Basic HTML5 geolocation services support test 
