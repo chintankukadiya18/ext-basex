@@ -810,7 +810,7 @@
             this.active = this.result = module.pending = false;
 
             this.doCallBacks(opt, this.result , module, [{
-                        error : (this.lastError = response.fullStatus.error),
+                        error : (this.lastError = (response.fullStatus || {}).error),
                         httpStatus : response.status,
                         httpStatusText : response.statusText
                     }]);
@@ -1005,13 +1005,13 @@
                 MM = this.MM;
             
             this.timedOut = !!timedOut;
+            this.result = loaded;
+
+            Ext.isFunction(cb) && cb.apply(this.options.scope || this, [this.result, this.loaded, this.executed]);
             
-            if(this.result = loaded){
-	            cb && cb.apply(this.options.scope || this, [this.result, this.loaded, this.executed]);
+            if(this.result){
                 MM.fireEvent('complete', MM, this.result, this.loaded, this.executed);
-                
             }else if(this.active && (this.timedOut || lastModule.timedOut)){
-                cb && cb.apply(this.options.scope || this, [this.result, this.loaded, this.executed]);
                 MM.fireEvent('timeout', MM, lastModule , this.executed);
             }
             
