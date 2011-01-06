@@ -1,7 +1,7 @@
  /* global Ext */
 
  /**
-    jit.js 2.0 
+    jit.js 2.0
   ************************************************************************************
 
    $JIT [Dynamic Resource loader (basex 3.1+ support required)]
@@ -31,13 +31,13 @@
    Donations are welcomed: http://donate.theactivegroup.com
 
   */
-  
+
 
    if(typeof Ext == undefined || !Ext.hasBasex)
       {throw "Ext and ext-basex 3.1 or higher required.";}
 
   (function(){
-    
+
     /**
      * private -- <script and link> tag support
      */
@@ -64,13 +64,13 @@
            },k);
            return results;
         };
-    
-    
+
+
     /**
      * @class Ext.ux.ModuleManager
      * @version 2.0 beta
      * ***********************************************************************************
-     * @author Doug Hendricks. doug[always-At]theactivegroup.com 
+     * @author Doug Hendricks. doug[always-At]theactivegroup.com
      * @copyright 2007-2010, Active Group, Inc. All rights reserved.
      * ***********************************************************************************
      * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
@@ -95,7 +95,7 @@
      *
      * Donations are welcomed: http://donate.theactivegroup.com
      *
-     * @constructor - creates a new instance of ux.ModuleManager 
+     * @constructor - creates a new instance of ux.ModuleManager
      * @methodOf Ext.ux.ModuleManager @param {Object} config
      * @example
      * Sample Usage:
@@ -122,32 +122,32 @@
      * Configuration options
      */
     Ext.namespace('Ext.ux');
-    
+
     /** @private */
     var gather = function(method, url, callbacks, data, options) {
 
         var tag, attribs;
         callbacks || (callbacks = {});
-        
+
         if (method == 'SCRIPT') {
             tag  = method;
             attribs = {
                  type : "text/javascript",
                   src : url
              };
-            
+
         } else if (method == 'LINK') {
             tag = method;
             attribs = {
                     rel : "stylesheet",
                     type : "text/css",
                     href : url
-                    };   
+                    };
         }
         return tag ? A.monitoredNode(tag, attribs, callbacks, options.target || window) :
                  A.request.apply(A,arguments);
      };
-     
+
     Ext.ux.ModuleManager = function(config) {
 
         Ext.apply(this, config || {}, {
@@ -164,7 +164,7 @@
 
         this.addEvents({
             /**
-             * @event loadexception Fires when any exception is raised. 
+             * @event loadexception Fires when any exception is raised.
              *     Returning false prevents any subsequent pending module load requests
              * @param {Ext.ux.ModuleManager} this
              * @param {String} module -- the module object
@@ -246,7 +246,7 @@
         Ext.ux.ModuleManager.superclass.constructor.call(this);
 
     };
-    
+
     Ext.extend(Ext.ux.ModuleManager, Ext.util.Observable, {
         /**
          * @cfg {Boolean} disableCaching True to ensure the the browser's
@@ -314,18 +314,18 @@
                 return this.modules[name] || null;
             }
         },
-       
+
         /**
-         * @private 
+         * @private
          */
         createModule : function(name, options) {
             var mod = this.getModule(name) || this.modulate(name, options);
-            this.modules[mod.name] || (this.modules[mod.name]= mod); 
+            this.modules[mod.name] || (this.modules[mod.name]= mod);
             return mod;
         },
-        
+
         /**
-         * @private 
+         * @private
          */
         modulate : function(moduleName, options) {
 	        if (!moduleName) { return null; }
@@ -336,16 +336,16 @@
                  }
                 ,options || {},
                 isObject(moduleName)? moduleName : {});
-            
+
 	        var mname = String(moduleName.name || moduleName),
 	            mod   = isObject(moduleName) ? moduleName : {},
-                parts = mname.trim().split('\/'), 
+                parts = mname.trim().split('\/'),
 	            name = Ext.value(mod.name, parts.last()),
 	            fname = name.indexOf('.') !== -1 ? mname : mname + '.js',
 	            path = mod.path || options.path || '',
                 url = options.url || mod.url || (path + fname),
                 isCSS = options.isCSS || /.css\b/i.test(url);
-	
+
 	        return Ext.apply(mod, {
 	                    name      : name,
 	                    fullName  : isCSS ? mname  : fname,
@@ -361,7 +361,7 @@
                         isCSS     : isCSS,
                         virtual   : !!options.virtual,
                         none      : !!options.none
-                        
+
 	                });
 	    },
 
@@ -391,59 +391,59 @@
 
 	                modules : new Array().concat(modules),
 	                poll : function() {
-	                    
+
 	                    var depends = (window.$JIT ? $JIT.depends : null) || {};
 	                    var assert = this.polling ? this.modules.every( function(arg, index, args) {
-	                           
+
 	                           var modName = arg.replace('@',''),virtual = false, test=true;
-	                           if(depends[modName] && 
-	                             ((virtual = depends[modName].virtual || false) || 
-                                    (isArray(depends[modName].depends) && 
+	                           if(depends[modName] &&
+	                             ((virtual = depends[modName].virtual || false) ||
+                                    (isArray(depends[modName].depends) &&
 	                                  !!depends[modName].length ))){
 	                               test = depends[modName].depends.every(arguments.callee);
 	                               test = virtual ? test && ((MM.getModule(modName)||{}).loaded = true): test;
 	                           }
-	                           
+
 	                           test = test && (virtual || MM.loaded(modName) === true);
-	                           block.pendingModule = test ? null : MM.getModule(modName); 
+	                           block.pendingModule = test ? null : MM.getModule(modName);
 	                           return test;
 	                    }) : false;
-	
+
 	                    if (!assert && this.polling && !this.aborted) {
 	                        this.poll.defer(50, this);
 	                        return;
 	                    }
-	
+
 	                    this.stop();
                         this.pendingModule && (this.pendingModule.timedOut = this.timedOut);
 	                    Ext.isFunction(callbackFn) && callbackFn.call(scope, assert, this.timedOut, this.pendingModule);
-	
+
 	                },
-	
+
 	                polling : false,
-	
+
 	                abort : function() {
 	                    this.aborted = true;
 	                    this.stop();
 	                },
-	
+
 	                stop : function() {
 	                    this.polling = false;
 	                    this.timer && clearTimeout(this.timer);
 	                    this.timer = null;
 	                },
-	
+
 	                timer : null,
-	
+
 	                timeout : parseInt(timeout || MM.timeout, 10) || 10000,
-	
+
 	                onTimeout : function() {
 	                    this.timedOut = true;
 	                    this.abort();
 	                },
-	
+
 	                retry : function(timeout) {
-	
+
 	                    this.stop();
 	                    this.polling = true;
 	                    this.aborted = this.timedOut = false;
@@ -621,7 +621,7 @@
 
     var Task = Ext.ux.ModuleManager.Task = function(MM, modules) {
 
-        Ext.apply(this, 
+        Ext.apply(this,
             {
             result : true,
             active : false,
@@ -656,7 +656,7 @@
         this.prepare(modules);
 
     };
-   
+
     Ext.extend(Task, Object , {
         /**
          *  @private
@@ -668,9 +668,9 @@
             this.oav = this.MM.onAvailable.call(this.MM,
                         this.onAvailableList, this.onComplete, this,
                         this.options.timeout, this.options);
-                                   
+
             this.nextModule();
-            
+
         },
 
         /**
@@ -679,18 +679,18 @@
          */
         doCallBacks : function(options, success, currModule, args) {
             var cb, C;
-            
+
             if (C = currModule) {
-                var timedOut = C.timedOut || this.timedOut, 
+                var timedOut = C.timedOut || this.timedOut,
                     res = this.timedOut || this.MM.fireEvent.apply(this.MM, [
                                 (success ? 'load' : 'loadexception'),
                                 this.MM, C ].concat(args || []));
-                
+
                 success || (this.active = (!timedOut && res !== false));
 
                 // Notify other pending async listeners
                 if (isArray(C.notify)) {
-                    forEach(C.notify, 
+                    forEach(C.notify,
                         function(chain, index, chains) {
                                 if (chain) {
                                     chain.nextModule();
@@ -699,11 +699,11 @@
                             });
                     C.notify = [];
                 }
-                
+
                 //script Tag cleanup
                 if(C.element && !options.debug && jsRe.test(C.extension) && options.method == DOM){
-                         
-                    C.element.removeAllListeners();  
+
+                    C.element.removeAllListeners();
 	                var d = C.element.dom;
                     if(Ext.isIE){
                         //Script Tags are re-usable in IE
@@ -720,7 +720,7 @@
                     d = null;
                     delete C.element;
                 }
-                
+
             }
             this.nextModule();
         },
@@ -730,19 +730,19 @@
          *
          */
         success : function(response , ev, target ) {
-            
-            var module = response.argument.module, 
-                opt = module.options, 
-                executable = (!opt.proxied && jsRe.test(module.extension) && !opt.noExecute && opt.method !== DOM), 
+
+            var module = response.argument.module,
+                opt = module.options,
+                executable = (!opt.proxied && jsRe.test(module.extension) && !opt.noExecute && opt.method !== DOM),
                 cbArgs = null,
                 MM = this.MM,
                 isCSS = module.isCSS; // && opt.method != DOM;
-            
+
             this.currentModule = module.name;
 
             if (!module.loaded) {
                 try {
-                    
+
                     if (MM.fireEvent('beforeload', MM, module,
                             response, response.responseText) !== false) {
 
@@ -803,7 +803,7 @@
          */
 
         failure : function(response) {
-            
+
             var module = response.argument.module, opt = module.options;
             module.contentType = response.contentType || '';
             this.currentModule = module.name;
@@ -826,15 +826,15 @@
                 params = null, data = null, moduleObj;
 
             while (module = this.workList.shift()) {
-                
+
                 // inline callbacks
                 if (Ext.isFunction(module)) {
                     module.apply(this.options.scope || this, [this.result, null, this.loaded]);
                     continue;
                 }
-                
+
                 if(!this.active)continue;
-                
+
                 // setup possible single-use listeners for the current
                 // request chain
                 if (module.listeners) {
@@ -843,12 +843,12 @@
                     delete module.listeners;
                 }
                 params = null, data = null;
-                
+
                 if (module.name || Ext.isString(module)) {
-                    
-                    moduleObj = this.MM.createModule(module, module.name ? module : {} );  
+
+                    moduleObj = this.MM.createModule(module, module.name ? module : {} );
                     options = Ext.apply({}, this.options); //clone default options
-                    
+
                     var isCSS = moduleObj.isCSS;
                     /**
                      * Due to LINK tag onload event limitations, CSS via GET is the default
@@ -860,7 +860,7 @@
                         });
                     }
                     options = moduleObj.options = Ext.apply(options, moduleObj.options);
-                    
+
                     if (!moduleObj.loaded || options.forced) {
                         if (params = options.params) {
 	                        Ext.isFunction(params)&& (params = params.call(options.scope || window,options));
@@ -868,13 +868,13 @@
 	                        data = params; // setup for possible post
 	                    }
 	                    url = moduleObj.url;
-	
+
 	                    executable = (!options.proxied
 	                            && jsRe.test(moduleObj.extension) && !options.noExecute);
 
                         if (!moduleObj.pending || options.forced) {
                             moduleObj.pending = true;
-                            
+
                             var callback = {
                                 success : this.success,
                                 failure : this.failure,
@@ -883,19 +883,19 @@
                                     module : moduleObj
                                 }
                             };
-                            
+
                             if(isCSS){
                                 /* A LINK tag for CSS loading will not raise an onload event
-                                * so default to an optimistic (loaded:true) 
+                                * so default to an optimistic (loaded:true)
                                 */
                                 callback.immediate = moduleObj.loaded = options.method == DOM;
                                 moduleObj.pending = !callback.immediate;
                             }
-                            
+
                             options.async = options.method === DOM
                                     ? true
                                     : options.async;
-                                    
+
                             if (/get|script|dom|link/i.test(options.method)) {
                                 url += (params ? '?' + params : '');
                                 if (options.disableCaching == true) {
@@ -903,19 +903,19 @@
                                 }
                                 data = null;
                             }
-                                    
+
                             transport = gather(
-                                        options.method == DOM ? 
+                                        options.method == DOM ?
                                             (isCSS ? LINK : SCRIPT)
                                                 : options.method,
-                                        url, 
+                                        url,
                                         callback,
                                         data,
                                         options);
-                                        
+
                             moduleObj.element = options.method == DOM ? transport : null;
                         }
-                        
+
                         if ( options.async) { break; }
 
                     } else {
@@ -926,10 +926,10 @@
 
                 } // end if named module
                 else {
-                    Ext.apply(this.options, module);  //a serial configuration update 
+                    Ext.apply(this.options, module);  //a serial configuration update
                 }
             } // oe while(module)
-            
+
             if (this.active && module && moduleObj && moduleObj.options.async ) {
                 moduleObj.notify || (moduleObj.notify = new Array());
                 moduleObj.notify.push(this);
@@ -944,12 +944,12 @@
          */
 
         prepare : function(modules) {
-  
+
             var onAvailableList = new Array(),
                 mod,
                 MM = this.MM,
                 resolve = (function(module) {
-                    
+
 	                if (!module)return null;
 	                mod = null;
 	                if(Ext.isString( module)){  // a named resource
@@ -966,13 +966,13 @@
 	                   // {name:'something', url:'assets/something'}
 	                    mod = MM.createModule(module, mOptions);
 	                }else if (isObject(module)){
-	                    
+
 	                    // coerce to array to support this notation:
 	                    // {name:'scriptA' or
 	                    // {modules:['name1',{name : 'name2', method : 'GET'} ],callback:cbFn,...
 	                    // so that callback is only called when the last
 	                    // in the implied list is loaded.
-	                    
+
 	                    if (Ext.isArray(module.modules)) {
 	                        return [module].concat(module.modules.map(resolve));
 	                    }else{
@@ -982,39 +982,39 @@
 	                      mod = module;
 	                  }
 	                  opts = null;
-	                  
+
 	                  if(!mod || mod.virtual || mod.none) return null;
 	                  if(isObject(mod) && mod.name){
 		                  onAvailableList.push(mod.name);
 	                  }
 	                  return mod;
-	                
+
 	            }).createDelegate(this);
-            
+
             this.workList = modules.map(resolve).flatten().compact();
             this.onAvailableList = onAvailableList.flatten().unique();
-            
+
         },
 
         /**
          * @private
          */
-        onComplete : function(loaded, timedOut, lastModule) { 
-            
+        onComplete : function(loaded, timedOut, lastModule) {
+
             var cb = this.options.callback,
                 MM = this.MM;
-            
+
             this.timedOut = !!timedOut;
             this.result = loaded;
 
             Ext.isFunction(cb) && cb.apply(this.options.scope || this, [this.result, this.loaded, this.executed]);
-            
+
             if(this.result){
                 MM.fireEvent('complete', MM, this.result, this.loaded, this.executed);
             }else if(this.active && (this.timedOut || lastModule.timedOut)){
                 MM.fireEvent('timeout', MM, lastModule , this.executed);
             }
-            
+
             // cleanup single-use listeners from the previous request chain
             if (this.unlisteners) {
                 forEach(this.unlisteners, function(block) {
@@ -1030,7 +1030,7 @@
                             }, this);
                 }, this);
             }
-            
+
             this.active = false;
             this.nextModule(); //Flush any remaining inline callbacks
         }
@@ -1048,20 +1048,20 @@
 
         getMap:function(module){
 
-            var result = new Array(), 
+            var result = new Array(),
                 options = isObject(module) ? module : {},
                 M, isLinkedRe = /^\@/;
 
             forEach([].concat(module),
               function(mod, options){
-                
+
                 var c=arguments.callee,
                     moduleName = isObject(mod)? mod.name || null : mod,
                     isLinked = isLinkedRe.test(String(moduleName)),
                     map;
-                    
+
                 isLinked && (moduleName = moduleName.replace(isLinkedRe,''));
-                
+
                 //Locate a possible named mapping match within the depends hash
                 (map = (moduleName && isLinked) ? this.depends[moduleName] : null)
                     && forEach(map.depends||[] ,
@@ -1072,25 +1072,25 @@
 	                              result.push( module );
 	                    },
                       this);
-                
+
                 if(mod){
 	                if(map){
                         map = Ext.apply({}, Ext.isObject(mod) ? mod : {}, map);
-	                    moduleName && result.push(L.createModule( moduleName, map)); 
+	                    moduleName && result.push(L.createModule( moduleName, map));
 	                }else{
                         result.push(mod);
                     }
                 }
             },this);
-            
+
             return uniqueMembers(result, 'name');
         },
         /**
-         * @cfg {Object} styleAdjust Optional Regexp for adjusting relative paths in 
+         * @cfg {Object} styleAdjust Optional Regexp for adjusting relative paths in
          * dynamically loaded styleSheets
-         * @example 
+         * @example
          *  {
-         *     pattern:/url\(\s*\.\.\//ig, 
+         *     pattern:/url\(\s*\.\.\//ig,
          *     replacement:'url(resources/'
          *   }
          */
@@ -1101,8 +1101,8 @@
 
     /**
      * @class $JIT
-     * @version 2.0 
-     * @author Doug Hendricks. doug[always-At]theactivegroup.com 
+     * @version 2.0
+     * @author Doug Hendricks. doug[always-At]theactivegroup.com
      * @copyright 2007-2010, Active Group, Inc. All rights reserved.
      * @donate <a target="tag_donate" href="http://donate.theactivegroup.com"><img border="0" src="http://www.paypal.com/en_US/i/btn/x-click-butcc-donate.gif" border="0" alt="Make a donation to support ongoing development"></a>
      * @license <a href="http://www.gnu.org/licenses/gpl.html">GPL 3.0</a>
@@ -1118,25 +1118,25 @@
      *        var t = new justLoadedClass();
      *       }
      *  });
-     *  
+     *
      * //or, A long running request can be evaluated asynchronously later:
      * $JIT.onAvailable (['moduleA', 'uxpackage'], function(loaded){
      *     if(loaded){
      *        var t = new justLoadedClass();
      *       }
      * });
-     * 
+     *
      * $JIT( {module:['modA','path/modB'],
      *      callback: cbFn,
      *      scope: null,  //callback scope
      *      modulePath : 'assets/scripts/', //(optional) root for request chain
      *      disableCaching : true, //prevent browser caching of modules
      *      cacheResponses : false, //true to cache the text content of the module
-     *      async : false // synchronous request 
+     *      async : false // synchronous request
      *      method:'DOM', //others: 'GET', 'POST', 'DOM' writes to script tags for debugging
      *      proxied : false //if true or config, uses the JSONP transport
-     *      xdomain : false,  //(optional) for modern browsers supporting cross-domain requests  
-     *      queue:{name:'fast', priority: 2}, //(optional) Queuing support 
+     *      xdomain : false,  //(optional) for modern browsers supporting cross-domain requests
+     *      queue:{name:'fast', priority: 2}, //(optional) Queuing support
      *      ... });
      *
      * //Inline callbacks
@@ -1154,7 +1154,7 @@
      *      progressFn, .... );
      *
      * //Define logical dependencies: (Adjust to suite your site layout.)
-     *  
+     *
      *  var ux= 'ux/';
      *  Ext.apply( $JIT.depends , {
      *  // JS source file | source location | Dependencies (in required load order)
@@ -1171,25 +1171,25 @@
      *  ,'mifmsg'      :   {path: ux ,          depends: [ '@mif'] }
      *  ,'mifdd'       :   {path: ux ,          depends: [ '@mif'] }
      * });
-     * 
+     *
      * //then, load as assembly:
      * $JIT('@uxfusion', callbackFn);
      * or
      * $JIT.onAvailable('uxfusion', callbackFn);
-     *  
+     *
      * //$JIT also amends Ext.ComponentMgr to permit inline dynamic (synchronous-only)
      * loading of resources when using delayed-loading of Component configurations:
-     *  
+     *
      *  new Ext.Panel({
      *     layout:'fit',
      *     items:{
      *        //demand and load 'customerform.js' and 'gmap' modules (if not already available)
-     *        <b>require</b> : ['dialogs/customerform','gmap'],    
+     *        <b>require</b> : ['dialogs/customerform','gmap'],
      *        xtype : 'tabpanel',
      *        items : {title:'Grid', <b>JIT:</b>'custom-grid',...}
      *      }
      *  });
-     *  
+     *
      *  Another chained asynchronous method available is namespace/object polling:
      *  $JIT('ux/Rowediter').onClassAvailable('Ext.ux.grid.RowEditor',function(available){
               if(available){
@@ -1200,36 +1200,36 @@
           myGrid,
           30  //second timeout
          );
-     *  
-     *  
+     *
+     *
      *  //Load a script via script tag:
      *  $JIT.script('resources/script/admin[.js]', function(loaded){ ... } );
-     *  
+     *
      *  //Make an Ajax request
      *  $JIT.post({params:{node:44}}, 'assets/treenodes.php',
      *   function(loaded, modules){
      *      if(loaded){
      *        var nodes = modules.first().content['JSON/text/XML'];
-     *        ... 
+     *        ...
      *      }
      *    });
-     *    
+     *
      *  //Retrieve the content from a previously loaded (cached) resource:
      *  var text = $JIT.getModule('treenodes').content.text;
-     *  
-     *  //Load a CSS resource and apply it as a theme:
+     *
+     *  //Load CSS resources and apply one as a theme:
      *  $JIT.css({name:'brightblue', url: 'themes/brightblue.css', applyStyle : true}, 'lightgreen.css' );
-     *  
+     *
      *  $JIT.onAvailable('lightgreen.css')
      *  .Then(
      *    function(){
      *     $JIT.applyStyle('lightgreen.css');
      *   })
      *  .Else(
-     *    function(){ 
+     *    function(){
      *      alert('Could not load theme.');
      *   });
-     *   
+     *
      *  //Stylesheet removal:
      *  $JIT.removeStyle('brightblue');
      */
@@ -1241,16 +1241,16 @@
            function(module){
             modules = modules.concat(Ext.isFunction(module) ? module : L.getMap(module) );
          }, L);
-        modules = modules.flatten(); 
+        modules = modules.flatten();
         var _task;
         (function(){
 	        _task = L.load.apply(L,modules.concat(
 	          function(success){
 	            var stack = $JIT[success?'thenStack':'elseStack'];
-	            isArray(stack) && 
+	            isArray(stack) &&
 	                forEach(stack, function(cb){
 	                   cb(this, this.loaded,success?'thenStack':'elseStack');
-                       
+
 	                },_task); //scope is Task
 	            $JIT.thenStack=[];
 	            $JIT.elseStack=[];
@@ -1258,9 +1258,9 @@
         })();
         return $JIT;
     };
-    
+
     Ext.ux.$JIT = Ext.require = $JIT;
-    
+
     var on = L.addListener.createDelegate(L),
         un = L.removeListener.createDelegate(L),
         jitWrap = function(method){
@@ -1288,13 +1288,13 @@
              */
             onAvailable : function(){
                 L.onAvailable.apply(L, arguments);
-                return $JIT;  
+                return $JIT;
             },
-            
+
             /**
              * @name onClassAvailable
              * @methodOf $JIT
-             * Invoke the passed callback when all specified class Objects are available.
+             * Invoke the passed callback when all specified class constructors are available.
              * @param {Array,String} classList single of Array of string classNames to test.
              * @param {Function} callbackFn Callback function invoked with the following arguments:<p>
              *   {Boolean} success,
@@ -1310,18 +1310,18 @@
     },
     myGrid
     );
-  
+
  or
- 
+
  $JIT.onClassAvailable(['Ext.ux.grid.RowEditor','Ext.ux.ManagedIFrame'],classesAreHereFn);
              */
-            onClassAvailable : (function(){ 
-            
+            onClassAvailable : (function(){
+
 	            var options = null;
-	            
-	            var F = function OCAV(classList, callback, scope, timeout) { 
-		               var o, 
-		                   d, 
+
+	            var F = function OCAV(classList, callback, scope, timeout) {
+		               var o,
+		                   d,
 		                   classes=[],
 		                   opt = {
 		                      interval : 100,
@@ -1329,31 +1329,31 @@
 		                      callback : callback || Ext.emptyFn,
 		                      scope    : scope || null
 		                      };
-		                     
-	
+
+
 	                   if(!options){
 	                       options = Ext.clone(opt);
 	                   }
-		               
-		               Ext.each([].concat(classList||[]).compact(), 
+
+		               Ext.each([].concat(classList||[]).compact(),
 		                  function (v) {
 		                     if(Ext.isString(v)){
 			                     d = v.split(".");
 			                     if(o = window[d[0]]){
-				                     Ext.each(d.slice(1), 
+				                     Ext.each(d.slice(1),
 				                        function (next) {
 				                           return !!(o = o[next]);
-				                       }); 
+				                       });
 				                       o && classes.push(o);
 			                      } else return false;
 	                         }
-		                 }); 
-                         
+		                 });
+
                          //callback with the first Array element if only one
                          var C = classes.compact();
                          C = C.length < 2 ? C.first() : C;
-                         
-	                     if(!!o){ 
+
+	                     if(!!o){
 		                    options.callback.call(options.scope, true, C);
 		                 }else{
 		                    if(--options.retries){
@@ -1370,13 +1370,89 @@
 	                 var OCAV = null;
 	                 return F;
             })(),
-            
+
+            /**
+             * @name onXtypeAvailable
+             * @methodOf $JIT
+             * Invoke the passed callback when all specified xtypes are available.
+             * @param {Array,String} xtypeList single (or Array) of string xtypes to test.
+             * @param {Function} callbackFn Callback function invoked with the following arguments:<p>
+             *   {Boolean} success,
+             *   {Array} classes</p>
+             * @param {Object} scope Scope with call the callback with.
+             * @param (Integer) timeout Number of seconds to wait before timeout (default 30 seconds)
+             * @example
+  $JIT.onXtypeAvailable('filtergrid',function(available){
+      if(available){
+         this.grid = Ext.create({xtype:'filtergrid', ... });
+         .....
+      }
+    },
+    myApp
+    );
+
+ or
+
+ $JIT.onXtypeAvailable(['filtergrid','iframepanel'], classesAreHereFn);
+             */
+
+            onXtypeAvailable : (function(){
+
+	            var options = null,
+                    F = function OXAV(xtypeList, callback, scope, timeout) {
+
+		               var Class,
+		                   classes=[],
+		                   opt = {
+		                      interval : 100,
+		                      retries  : (timeout||30000)/100,
+		                      callback : callback || Ext.emptyFn,
+		                      scope    : scope || null
+		                      },
+		                    cmanTypes = Ext.ComponentMgr.types,
+		                    xList = [].concat(xtypeList).compact();
+
+	                   if(!options){
+	                       options = Ext.clone(opt);
+	                   }
+		               Ext.each([].concat(xtypeList||[]).compact(),
+
+		                  function (xtype) {
+		                     if(Ext.isString(xtype)){
+			                     if(Class = cmanTypes[xtype]){
+				                       classes.push(Class);
+			                      } else return false;
+	                         }
+		                 });
+
+                         //callback with the first Array element if only one
+
+                         var C = classes.compact();
+
+	                     if(xList.length == C.length){
+		                    options.callback.call(options.scope, true, C.length < 2 ? C.first() : C);
+		                 }else{
+		                    if(--options.retries){
+	                           arguments.callee.defer(options.interval,this,arguments);
+	                           return;
+	                        }
+		                    else {
+	                           options.callback.call(options.scope, false, C.length < 2 ? C.first() : C);
+	                        }
+		                }
+	                    options = null;
+                        return $JIT;
+		             };
+	                 var OXAV = null;
+	                 return F;
+            })(),
+
             thenStack   :[],
             Then        : function(fn, scope){
-                Ext.isFunction(fn) && this.thenStack.push(fn.createDelegate(scope||window));  
+                Ext.isFunction(fn) && this.thenStack.push(fn.createDelegate(scope||window));
                 return $JIT;
             },
-            
+
             elseStack   :[],
             Else        : function(fn, scope){
                 Ext.isFunction(fn) && this.elseStack.push(fn.createDelegate(scope||window));
@@ -1391,7 +1467,7 @@
             un          : un,
             removeListener : un,
             depends     : L.depends,
-            
+
             loaded      : L.loaded.createDelegate(L),
             getModule   : L.getModule.createDelegate(L),
 
@@ -1408,19 +1484,20 @@
                           },
             execScript  : L.globalEval.createDelegate(L),
             lastError   : function(){return L.lastError;},
-            
+
             /**
              * @param {Integer} set/change the default onAvailable/load method timeout value in
              *      milliseconds
              */
-            setTimeout  : function(tmo){ 
+            setTimeout  : function(tmo){
                             L.timeout = parseInt(tmo||0,10);
                             return $JIT;
                             },
             applyStyle  : L.applyStyle.createDelegate(L),
             removeStyle  : L.removeStyle.createDelegate(L),
             setStyleAdjust : function(adjustConfig){
-                L.styleAdjust = adjustConfig;  
+                L.styleAdjust = adjustConfig;
+                return $JIT;
             },
 
             css         : jitWrap(L.load.createDelegate(L,[
@@ -1441,7 +1518,7 @@
                              modulePath    :''
                              }],0)
                            ),
-                             
+
             post         : jitWrap(L.load.createDelegate(L,[
 				            {method        : POST,
 				             modulePath    :''
@@ -1459,10 +1536,10 @@
     $JIT.provide('jit','ext-basex');
 
     /*
-     * 
+     *
       Sample global loadexception handler
     $JIT.on('loadexception',function(loader, module , ecode, title){
-      
+
       if(!ecode)return;
       var ec = ecode.error || ecode;
       var msg = ec? ec.message || ec.description || ec.name || ecode: null;
@@ -1478,7 +1555,7 @@
       }
     });
    */
-   
+
     /* Add 'require/JIT' support (synchronous only) permitting progressive loads to lazy-loaded component configs
      new Ext.Panel({
         layout:'fit',
@@ -1488,9 +1565,9 @@
            items : {title:'Grid', JIT:'edit-grid',...}
          }
      });
-     
+
      or
-     
+
      var grid = $JIT.create({
          require : [{timeout: 15000}, 'customGrid.js'],
          title : 'User List',
@@ -1512,16 +1589,16 @@
         };
 
     if(mgr){
-       
+
        $JIT.create =
-       Ext.create = 
-       mgr.create = 
+       Ext.create =
+       mgr.create =
        mgr.create.createInterceptor( function(config, defaultType){
 
                var require= config.require || config.JIT;
                if(!!require){
                    require = ([].concat(require)).map( assert ).compact();
-                   
+
                    //This synchronous request will block until completed
                    $JIT([load_options].concat(require));
 
